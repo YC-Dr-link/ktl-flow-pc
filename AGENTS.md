@@ -15,7 +15,7 @@ QR 입력(02 §4, 테스트 벡터 https://raw.githubusercontent.com/YC-Dr-link/
 - 화면 시나리오: https://raw.githubusercontent.com/YC-Dr-link/ktl-hub/main/docs/03-UI시나리오.md
 
 ## 일하는 방식
-1. **이슈 하나만** 한다. 사람이 준 이슈 번호(또는 협업 사이트의 📋 작업 지시서)를 기준으로 범위를 정한다. 다른 파트 코드는 건드리지 않는다.
+1. **이슈 하나만** 한다. 사람이 준 이슈 번호(또는 협업 사이트의 📋 작업 지시서)를 기준으로 범위를 정한다. 다른 파트 코드는 건드리지 않는다. 같은 파트 짝(파트너)의 이슈는 해도 된다 — 협업 사이트가 원래 담당자에게 자동으로 알린다. 시작할 때 그 이슈에 "이어서 할게요" 댓글을 남기라고 사람에게 알려 준다.
 2. 브랜치에서 일한다: `git checkout main && git pull && git checkout -b feat/<이슈번호>-<짧은설명>`. main에 직접 push하지 않는다.
 3. 작게 커밋한다. 메시지: `feat: 무엇을 (#이슈번호)` (feat · fix · docs · test · refactor · chore). 커밋 · PR에 AI 서명 줄(Co-Authored-By 등)을 넣지 않는다.
 4. 테스트를 같이 쓴다: pytest — 합성 풍동 CSV 6개 세트로 판별·계산이 정답 JSON과 소수 셋째 자리까지 일치
