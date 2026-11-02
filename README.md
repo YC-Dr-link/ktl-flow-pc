@@ -4,6 +4,8 @@
 
 Pi QR 한 번 + 풍동 CSV 6개 → 반복성·직선성·민감도 계산 확인 → 시트·셀 위치가 고정된 **통일 Excel**.
 
+통일 Excel 생성·검증: [docs/excel-export.md](docs/excel-export.md)
+
 | 기준 문서 | |
 |---|---|
 | 요구사항 | [REQ-A2-01~10](https://github.com/YC-Dr-link/ktl-hub/blob/main/docs/01-요구사항명세.md#3-a-2-실험-pc-도구--경태--영진) |
