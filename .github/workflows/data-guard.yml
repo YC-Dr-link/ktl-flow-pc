@@ -31,4 +31,5 @@ jobs:
           python-version: "3.12"
       - run: python -m pip install -r requirements-dev.txt
       - run: python -m playwright install --with-deps chromium
+      - run: python build.py --check
       - run: python -m pytest -q

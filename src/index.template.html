@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="{{POLICY}}">
+<title>유속계 정도검사 M4·M5</title>
+<style>{{STYLE}}</style>
+</head>
+<body>
+<a class="skip" href="#main">본문으로 건너뛰기</a>
+<header class="topbar">
+  <h1 class="app-title">유속계 정도검사 <span class="sub">M4·M5 기반 · 실험 PC 도구</span></h1>
+  <div class="save"><button type="button" class="btn large" id="saveBtn" disabled>Excel 만들고 저장</button></div>
+</header>
+<p class="skeleton-banner">실행 뼈대입니다. 파일 목록만 표시하며 QR 검증·내용 판별·계산·Excel 저장은 후속 작업에서 연결합니다.</p>
+<p id="saveMsg" class="msg" role="status">계산 결과와 시험자 확인이 연결되기 전에는 저장할 수 없습니다.</p>
+<p id="status" class="sr-only" role="status" aria-live="polite"></p>
+<noscript><p>파일 목록을 확인하려면 JavaScript를 허용해 주세요.</p></noscript>
+<main id="main" tabindex="-1">
+  <div class="app empty" id="app">
+    <aside class="rail" aria-labelledby="h-rail">
+      <h2 id="h-rail">풍동 프로그램의 CSV 6개를 넣으세요</h2>
+      <p class="lead">파일 선택·끌어놓기 흐름을 확인할 수 있습니다. 파일 내용은 아직 읽지 않습니다.</p>
+      <details class="more" id="qrBox">
+        <summary>QR 입력</summary>
+        <label for="qr-input">Pi QR 문자열</label>
+        <textarea id="qr-input" autocomplete="off" spellcheck="false" aria-describedby="qrHelp"></textarea>
+        <p class="hint" id="qrHelp">입력 미리보기입니다. QR 검증·한글 입력 복원은 연결 전입니다.</p>
+      </details>
+      <label class="drop" id="drop">
+        <input type="file" id="fileInput" aria-label="풍동 CSV 파일 선택" accept=".csv,text/csv" multiple>
+        <strong>CSV 파일을 여기에 끌어다 놓거나, 눌러서 고르세요</strong>
+        <span>여러 개를 한 번에 고를 수 있습니다. 새로 넣으면 이전 목록은 바뀝니다.</span>
+      </label>
+      <div class="row"><button type="button" class="btn weak" id="resetBtn" disabled>선택 초기화</button><span class="hint" id="fileCount">넣은 파일이 없습니다.</span></div>
+      <ul id="fileList" class="file-list" aria-label="선택한 파일"></ul>
+      <div class="slots" id="slots"></div>
+    </aside>
+    <section class="results" id="results" aria-labelledby="h-results" hidden>
+      <h2 id="h-results">계산 결과</h2>
+      <div class="notice warn"><h3>아직 계산하지 않았습니다</h3><p>선택한 파일은 판별 대기 상태입니다. 파일 개수만으로 종류·계산·판정의 정상 여부를 판단하지 않습니다.</p></div>
+      <div class="grid3">
+        <article class="card"><h3>반복성</h3><p>결과 대기</p></article>
+        <article class="card"><h3>직선성</h3><p>결과 대기</p></article>
+        <article class="card"><h3>설치방향 민감도</h3><p>결과 대기</p></article>
+      </div>
+      <h3>Excel로 저장</h3><p class="lead">출력 형식과 시험자 확인 흐름은 후속 이슈에서 연결합니다.</p>
+      <details class="more"><summary>일반사항 값 넣기 (연결 예정)</summary><p class="hint">추가 입력·검증은 아직 제공하지 않습니다.</p></details>
+      <details class="more"><summary>출력 셀 미리보기 (연결 예정)</summary><p class="hint">프로토타입 양식과 공동 계약의 차이를 확인한 뒤 연결합니다.</p></details>
+    </section>
+  </div>
+</main>
+<script>{{SCRIPT}}</script>
+</body>
+</html>

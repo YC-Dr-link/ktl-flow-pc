@@ -6,7 +6,9 @@
 - 파트: **A-2 실험 PC 도구** · 담당 경태(@newwwwwb) · 영진(@aengjins)
 - 무엇을 만드나: 요구사항 REQ-A2-01~10 — https://raw.githubusercontent.com/YC-Dr-link/ktl-hub/main/docs/01-요구사항명세.md
 - 파트 정보 · 제출물 형태: https://raw.githubusercontent.com/YC-Dr-link/ktl-hub/main/docs/04-역할분담.md
-- 기술: 추천: Python (pandas + openpyxl, 화면 tkinter, PyInstaller로 exe). 형태 결정은 이슈 #1 댓글을 따른다.
+- 기술: 이슈 #1에서 **단일 HTML**로 결정했다. M4·M5 v0.2.1-proto를 기반으로 작업하며 공동 계약이 우선이다.
+- 작업 시작: `docs/prototype-migration.md` 확인 → `src/` 수정 → `python build.py` → 테스트. `index.html`은 생성된 단일 배포 파일이다.
+- 프로토타입의 내장 견본·Excel 바이너리·압축 번들은 공개 레포에 그대로 복사하지 않는다. 계산·출력은 담당 이슈에서 공동 계약에 맞춰 이식한다.
 
 ## 계약 (바꾸지 말 것)
 QR 입력(02 §4, 테스트 벡터 https://raw.githubusercontent.com/YC-Dr-link/ktl-hub/main/docs/contracts/qr-test-vectors.json)과 통일 Excel 출력 형식·계산식(02 §5).

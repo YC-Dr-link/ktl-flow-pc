@@ -11,21 +11,21 @@ Pi QR 한 번 + 풍동 CSV 6개 → 반복성·직선성·민감도 계산 확�
 | 출력 · 계산식 | [02 §5](https://github.com/YC-Dr-link/ktl-hub/blob/main/docs/02-API명세.md#5-a-2-출력-형식-통일-excel) |
 | 화면 | [PC-01~04](https://github.com/YC-Dr-link/ktl-hub/blob/main/docs/03-UI시나리오.md#a-7-pc-01--pc-04-실험-pc-도구) |
 
-## 형태 결정
+## 형태·화면 기준
 
-**단일 HTML**로 진행한다. 설치·서버 실행 없이 브라우저에서 열 수 있고, HTML·CSS·JavaScript를 한 파일에 포함해 오프라인으로 전달하기 쉽다. 경태의 [이슈 #1 결정 댓글](https://github.com/YC-Dr-link/ktl-flow-pc/issues/1#issuecomment-6496196210)을 따른다.
+단일 HTML로 진행한다([이슈 #1 결정](https://github.com/YC-Dr-link/ktl-flow-pc/issues/1#issuecomment-6496196210)). 설치·서버 실행 없이 오프라인으로 전달하기 쉽다. 화면은 제공된 **M4·M5 v0.2.1-proto**의 한 화면 작업대, 고정 저장 버튼, 파일 6칸, 결과 카드·추가 입력 영역을 기반으로 한다.
 
-이번 PR은 PC-01~04 화면 이동 뼈대다. QR 검증·CSV 판별·계산·Excel 출력은 각 후속 이슈에서 구현한다. 입력값은 메모리에만 남고 새로 열면 초기화된다.
+이번 뼈대는 QR 입력 미리보기와 파일 선택·끌어놓기·초기화·반응형 배치를 제공한다. 파일 내용 판별·계산·시험자 확인·Excel 저장은 연결 전이며, 실제 업무 결과를 만들지 않는다. 입력은 메모리에만 유지한다.
 
 ## 실행
 
 1. `index.html` 하나를 PC로 복사한다.
-2. 파일을 더블클릭해 최신 Microsoft Edge 또는 Chrome에서 연다(설치·서버·인터넷 불필요).
-3. 왼쪽 단계 또는 이전·다음 버튼으로 PC-01~04 화면을 확인한다.
+2. 파일을 더블클릭해 Microsoft Edge 또는 Chrome에서 연다(설치·서버·인터넷 불필요).
+3. QR 입력란과 CSV 파일 선택·끌어놓기·초기화 흐름을 확인한다.
 
 ## 개발·검증
 
-배포 파일과 소스는 `index.html` 하나다. 외부 스크립트·폰트·CDN·네트워크 요청·빌드 단계가 없다. 테스트 도구는 개발 시에만 설치하며 제품 실행에는 필요하지 않다.
+수정은 `src/index.template.html`(구조), `src/styles.css`(프로토타입 스타일), `src/app.js`(연결 흐름)에서 한다. `python build.py`로 배포 파일 `index.html`과 CSS/JS의 CSP 해시를 다시 만든다. 빌더는 Python 표준 라이브러리만 사용한다. 실행 PC에는 Python이나 소스 폴더가 필요 없다.
 
 ```powershell
 python -m pip install -r requirements-dev.txt
@@ -33,11 +33,12 @@ python -m playwright install chromium
 python -m pytest -q
 ```
 
-설치된 Edge로 테스트하려면 두 번째 명령 대신 `$env:KTL_BROWSER_CHANNEL = 'msedge'`를 설정한다. 인터넷을 차단한 브라우저 컨텍스트에서 `file://`로 열기, 단계 이동·경계·키보드·새로고침 초기화, 좁은 화면과 외부 요청 여부를 검사한다.
+설치된 Edge로 테스트하려면 두 번째 명령 대신 `$env:KTL_BROWSER_CHANNEL = 'msedge'`를 설정한다. 테스트는 HTML 하나만 임시 폴더에 복사해 인터넷을 차단한 상태로 실행한다. 빌드 재현성, 파일 선택·교체·드롭·초기화, 입력 초기화, 파일명 안전 표시, 반응형 DOM 순서와 외부 요청 여부를 확인한다.
 
-## 후속 연결·확인 필요
+## 프로토타입을 이어서 작업하는 기준
 
-- QR: 공동 문서 02 §4 및 QR 테스트 벡터로 검증·한글 입력 복원을 연결한다.
-- CSV·계산·Excel: 공동 문서 02 §5의 형식·계산식을 유지하며 원본 보존·해시 기록·시험자 확인을 연결한다.
-- `TODO(확인 필요)`: Excel 출력 담당과 단일 HTML 내 xlsx 생성·그래프 포함 방식을 결정한다. 의존성을 도입하면 라이선스를 확인하고 로컬에 포함한다. CDN은 사용하지 않는다.
-- 민감도 그래프 2개는 S 요구사항이다. 그래프 미지원 라이브러리만으로 완료 처리하지 않는다.
+- [인계·후속 연결](docs/prototype-migration.md)을 먼저 읽는다. 앞으로 A-2 이슈는 이 소스 구조와 프로토타입을 기준으로 이어 간다.
+- 프로토타입 원본·견본 CSV·견본 Excel·HTML 내부의 견본과 양식 바이너리는 저장소에 복사하지 않았다. 테스트는 메모리에서 만든 가짜 값만 사용한다.
+- QR·계산·출력은 공동 문서 02 §4~5가 기준이다. 프로토타입과 충돌하면 공동 계약을 유지한다(2026-11-02 사용자 확인).
+- 현재는 스타일과 작업 흐름을 재사용했다. 기존 압축 JavaScript의 판별·계산·Excel 구현은 아직 이식하지 않았다.
+- 후속 라이브러리는 오프라인으로 포함하고 기존 MIT 고지를 보존한다. 현재 뼈대에는 JSZip·pako·xmldom이 포함되어 있지 않다.

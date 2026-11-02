@@ -1,131 +1,323 @@
 <!doctype html>
 <html lang="ko">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
-  <title>KTL 유속계 실험 PC 도구</title>
-  <style>
-    :root { color-scheme: light; font-family: system-ui, sans-serif; color: #1e293b; background: #f1f5f9; }
-    * { box-sizing: border-box; }
-    body { margin: 0; }
-    header, main, footer { max-width: 1080px; margin: auto; padding: 24px; }
-    header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-    h1 { font-size: 24px; margin: 4px 0; }
-    h2 { font-size: 22px; margin-top: 0; }
-    p { line-height: 1.7; }
-    .eyebrow, footer { color: #475569; font-size: 14px; }
-    .badge { border: 1px solid #cbd5e1; border-radius: 24px; padding: 8px 12px; white-space: nowrap; }
-    main { padding-top: 0; }
-    .notice { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 12px; padding: 16px; margin: 0 0 20px; }
-    .workspace { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 24px; }
-    nav ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-    button, textarea { font: inherit; }
-    button { padding: 12px 16px; border: 1px solid #cbd5e1; border-radius: 8px; background: white; color: #334155; cursor: pointer; }
-    nav button { width: 100%; text-align: left; min-height: 52px; }
-    button[aria-current="step"] { background: #1d4ed8; border-color: #1d4ed8; color: white; }
-    button:hover:not(:disabled) { border-color: #1d4ed8; }
-    button:disabled { cursor: not-allowed; color: #64748b; background: #f1f5f9; }
-    :focus-visible { outline: 3px solid #0284c7; outline-offset: 4px; }
-    .card { border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; background: white; min-width: 0; }
-    section { min-height: 280px; }
-    [hidden] { display: none !important; }
-    label { display: block; font-weight: 600; margin-bottom: 8px; }
-    textarea { display: block; resize: vertical; width: 100%; min-height: 100px; padding: 12px; border: 1px solid #94a3b8; border-radius: 8px; }
-    .help { font-size: 14px; color: #475569; }
-    .placeholder { padding: 20px; border: 1px dashed #94a3b8; border-radius: 8px; background: #f8fafc; }
-    .actions { display: flex; gap: 12px; justify-content: space-between; border-top: 1px solid #e2e8f0; padding-top: 16px; margin-top: 24px; }
-    #screen-status { margin: 16px 0 0; font-size: 14px; color: #475569; }
-    footer { padding-top: 0; line-height: 1.6; }
-    @media (max-width: 700px) {
-      header { align-items: flex-start; flex-direction: column; }
-      header, main, footer { padding-left: 16px; padding-right: 16px; }
-      .workspace { grid-template-columns: minmax(0, 1fr); gap: 16px; }
-      nav ol { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .card { padding: 20px; }
-    }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-jJkXZpV/OzRmI/5VGaXRugWkKArhCQ1W9YAb5s95Fus='; style-src 'sha256-MsoAetRdFkyx5rkKdssWDqSWpm44nDL35FyT7FkORbs='; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<title>유속계 정도검사 M4·M5</title>
+<style>:root {
+  --primary: #3182f6;
+  --action: #1b64da;
+  --weak-bg: #e8f3ff;
+  --canvas: #ffffff;
+  --on-action: #ffffff;
+  --line-strong: #d1d6db;
+  --ink: #191f28;
+  --body: #4e5968;
+  --muted: #6b7684;
+  --surface: #f2f4f6;
+  --line: #e5e8eb;
+  --field-border: #7b8794;
+  --danger: #d22030;
+  --danger-bg: #ffeeee;
+  --ok: #027648;
+  --ok-bg: #f0faf6;
+  --ok-line: #aeefd5;
+  --warn-bg: #fff3e0;
+  --warn-line: #ffa927;
+  --warn-ink: #333d4b;
+  --sp-xs: 4px;
+  --sp-sm: 6px;
+  --sp-md: 8px;
+  --sp-lg: 16px;
+  --sp-xl: 24px;
+  --sp-xxl: 32px;
+  --r-sm: 4px;
+  --r-field: 10px;
+  --r-btn-lg: 14px;
+  --r-xl: 16px;
+  --font: "Noto Sans KR", "Malgun Gothic", "맑은 고딕", "Apple SD Gothic Neo", system-ui, sans-serif;
+  --topbar-h: 81px;
+}
+* { box-sizing: border-box; }
+html { touch-action: manipulation; scroll-padding-top: 136px; }
+body { margin: 0; background: var(--canvas); color: var(--ink); font: 400 16px/24px var(--font); }
+:focus-visible { outline: 3px solid var(--action); outline-offset: 2px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.skip { position: absolute; left: var(--sp-md); top: -64px; z-index: 10; padding: var(--sp-md) var(--sp-lg); border-radius: var(--r-field); background: var(--ink); color: var(--canvas); }
+.skip:focus { top: var(--sp-md); }
+[hidden] { display: none !important; }
+.topbar { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-md) var(--sp-lg); padding: var(--sp-lg) max(var(--sp-xl), calc((100vw - 1260px) / 2 + var(--sp-xl))); border-bottom: 1px solid var(--line); background: var(--canvas); }
+.app-title { margin: 0; font-size: 22px; line-height: 31px; font-weight: 700; }
+.app-title .sub { margin-left: var(--sp-md); font-size: 14px; line-height: 21px; font-weight: 400; color: var(--muted); }
+.save { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-md) var(--sp-lg); }
+.save .hint { max-width: 360px; overflow-wrap: anywhere; }
+.sample-flag { margin: 0; padding: var(--sp-md) max(var(--sp-xl), calc((100vw - 1260px) / 2 + var(--sp-xl))); background: var(--warn-bg); border-bottom: 1px solid var(--warn-line); color: var(--warn-ink); font-size: 14px; line-height: 21px; font-weight: 600; }
+.msg { margin: 0; padding: 0 max(var(--sp-xl), calc((100vw - 1260px) / 2 + var(--sp-xl))); font-size: 15px; line-height: 22.5px; font-weight: 600; }
+.msg:not(:empty) { position: sticky; top: var(--topbar-h); z-index: 1; padding-top: var(--sp-md); padding-bottom: var(--sp-md); background: var(--surface); color: var(--ink); border-bottom: 1px solid var(--line); }
+.msg.err:not(:empty) { background: var(--danger-bg); border-bottom-color: var(--danger); color: var(--danger); }
+.msg.ok:not(:empty) { background: var(--ok-bg); border-bottom-color: var(--ok-line); color: var(--ok); }
+.msg a { color: inherit; text-underline-offset: 3px; }
+main { max-width: 1260px; margin: 0 auto; }
+.app { display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: var(--sp-xl); align-items: start; padding: var(--sp-xl); }
+.app.empty { grid-template-columns: minmax(0, 720px); justify-content: center; padding-top: var(--sp-xxl); padding-bottom: var(--sp-xxl); }
+h2 { margin: 0 0 var(--sp-md); font-size: 20px; line-height: 29px; font-weight: 600; }
+h3 { margin: var(--sp-xl) 0 var(--sp-md); font-size: 20px; line-height: 29px; font-weight: 600; }
+main:focus-visible { outline: none; }
+.app.empty h2 { font-size: 26px; line-height: 35px; font-weight: 700; }
+.lead { margin: 0 0 var(--sp-lg); color: var(--body); }
+.rail .lead { font-size: 13px; line-height: 19.5px; }
+.app.empty .rail .lead { font-size: 16px; line-height: 24px; }
+.hint { margin: 0; color: var(--muted); font-size: 13px; line-height: 19.5px; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-md) var(--sp-lg); margin-top: var(--sp-lg); }
+.sec-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--sp-xs) var(--sp-lg); margin: var(--sp-xl) 0 var(--sp-md); }
+.sec-head h3 { margin: 0; }
+.btn { display: inline-flex; align-items: center; justify-content: center; border: 0; cursor: pointer; font-family: var(--font); font-weight: 600; text-align: center; }
+.btn.large { height: 48px; padding: 0 20px; border-radius: var(--r-btn-lg); background: var(--action); color: var(--on-action); font-size: 16px; line-height: 24px; }
+.btn.weak { height: 48px; padding: 0 20px; border-radius: var(--r-btn-lg); background: var(--weak-bg); color: var(--action); font-size: 16px; line-height: 24px; }
+.btn:disabled { background: var(--line); color: var(--muted); cursor: not-allowed; }
+.drop { display: grid; position: relative; align-content: center; justify-items: center; gap: var(--sp-xs); padding: var(--sp-lg); border: 2px dashed var(--primary); border-radius: var(--r-xl); background: var(--weak-bg); text-align: center; cursor: pointer; }
+.drop strong { font-size: 16px; line-height: 24px; font-weight: 600; }
+.drop span { color: var(--body); font-size: 13px; line-height: 19.5px; }
+.drop.over { background: var(--canvas); border-style: solid; }
+.drop:focus-within { outline: 3px solid var(--action); outline-offset: 2px; }
+.drop input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.app.empty .drop { min-height: 260px; padding: var(--sp-xxl) var(--sp-lg); }
+.app.empty .drop strong { font-size: 17px; line-height: 25.5px; }
+.app.empty .drop span { font-size: 14px; line-height: 21px; }
+.slots { display: grid; gap: var(--sp-md); margin-top: var(--sp-lg); }
+details.slot { border-radius: var(--r-xl); background: var(--surface); }
+details.slot summary { display: grid; grid-template-columns: 1fr 16px; column-gap: var(--sp-md); align-items: center; min-height: 56px; padding: var(--sp-md) var(--sp-lg); list-style: none; cursor: pointer; }
+details.slot summary::-webkit-details-marker { display: none; }
+details.slot summary::after { content: ""; grid-column: 2; grid-row: 1 / span 2; width: 8px; height: 8px; margin-left: 2px; border-right: 2px solid var(--body); border-bottom: 2px solid var(--body); transform: rotate(45deg); }
+details.slot[open] summary::after { transform: rotate(-135deg); }
+.slot-label { display: flex; align-items: center; gap: var(--sp-md); font-size: 15px; line-height: 22.5px; font-weight: 600; }
+.slot-file { grid-column: 1; color: var(--body); font-size: 13px; line-height: 19.5px; overflow-wrap: anywhere; }
+.slot-body { padding: var(--sp-md) var(--sp-lg) var(--sp-lg); }
+.slot-body label { display: block; margin-bottom: var(--sp-xs); color: var(--body); font-size: 13px; line-height: 19.5px; font-weight: 600; }
+.why { margin: var(--sp-md) 0 0; color: var(--body); font-size: 13px; line-height: 19.5px; }
+.badge { display: inline-flex; align-items: center; height: 24px; padding: 0 var(--sp-md); border-radius: var(--r-sm); font-size: 13px; line-height: 19.5px; font-weight: 600; white-space: nowrap; }
+.badge.weak { background: var(--weak-bg); color: var(--action); }
+.badge.fill-ok, .badge.fill-fail { height: 28px; color: var(--on-action); font-size: 14px; line-height: 21px; }
+.badge.fill-ok { background: var(--ok); }
+.badge.fill-fail, .badge.fill-bad { background: var(--danger); color: var(--on-action); }
+select, input { width: 100%; height: 48px; padding: 0 var(--sp-lg); border: 1px solid var(--field-border); border-radius: var(--r-field); background-color: var(--canvas); color: var(--ink); font: 400 16px/24px var(--font); }
+select { appearance: none; padding-right: 40px; background-image: linear-gradient(45deg, transparent 50%, var(--body) 50%), linear-gradient(135deg, var(--body) 50%, transparent 50%); background-position: calc(100% - 22px) 50%, calc(100% - 16px) 50%; background-size: 6px 6px, 6px 6px; background-repeat: no-repeat; text-overflow: ellipsis; }
+.drop input { height: 100%; padding: 0; border: 0; }
+.notice { margin: 0 0 var(--sp-lg); padding: var(--sp-lg) var(--sp-xl); border-radius: var(--r-xl); background: var(--surface); color: var(--ink); }
+.notice h3 { margin: 0 0 var(--sp-md); font-size: 17px; line-height: 25.5px; }
+.notice ul { margin: 0; padding-left: var(--sp-xl); }
+.notice li + li { margin-top: var(--sp-xs); }
+.notice code { padding: 0 var(--sp-xs); border-radius: var(--sp-xs); background: var(--canvas); font-family: Consolas, "D2Coding", ui-monospace, monospace; font-size: 12px; }
+.notice.err { background: var(--danger-bg); border: 1px solid var(--danger); }
+.notice.err h3 { color: var(--danger); }
+.notice.warn { background: var(--warn-bg); border: 1px solid var(--warn-line); color: var(--warn-ink); }
+.notice.ok { background: var(--ok-bg); border: 1px solid var(--ok-line); color: var(--ok); }
+.notice:focus-visible { outline-offset: 2px; }
+.blocked-box { margin: 0 0 var(--sp-lg); padding: var(--sp-lg) var(--sp-xl); border-radius: var(--r-xl); background: var(--danger-bg); color: var(--danger); font-weight: 600; }
+.verdict-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-md) var(--sp-lg); padding: var(--sp-lg) var(--sp-xl); border: 1px solid var(--ok-line); border-radius: var(--r-xl); background: var(--ok-bg); color: var(--ok); font-size: 24px; line-height: 33px; font-weight: 700; }
+.after-verdict { margin-top: var(--sp-lg); }
+.after-verdict .notice { margin-bottom: 0; }
+.verdict-bar.fail { border-color: var(--danger); background: var(--danger-bg); color: var(--danger); }
+.verdict-bar .badge { height: 36px; padding: 0 var(--sp-lg); font-size: 20px; line-height: 29px; }
+.verdict-bar .aside { color: var(--body); font-size: 15px; line-height: 22.5px; font-weight: 400; }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-lg); }
+.card { padding: var(--sp-lg); border-radius: var(--r-xl); background: var(--surface); }
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-md); }
+.card h4 { margin: 0; font-size: 17px; line-height: 25.5px; font-weight: 600; }
+.card .cap { margin: var(--sp-xs) 0 0; color: var(--body); font-size: 13px; line-height: 19.5px; }
+.card .val-row { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0 var(--sp-md); }
+.card .big { margin: 0; font-size: 36px; line-height: 46px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.card .big small { margin-left: var(--sp-xs); color: var(--body); font-size: 16px; font-weight: 400; }
+.limit { color: var(--body); font-size: 15px; line-height: 22.5px; }
+.card dl { display: grid; grid-template-columns: auto 1fr; gap: var(--sp-xs) var(--sp-md); margin: var(--sp-md) 0 0; padding-top: var(--sp-md); border-top: 1px solid var(--line-strong); color: var(--body); font-size: 14px; line-height: 21px; }
+.card dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.equip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sp-md) var(--sp-xl); margin: 0; }
+.equip div { padding-bottom: var(--sp-xs); border-bottom: 1px solid var(--line); }
+.equip dt { color: var(--muted); font-size: 13px; line-height: 19.5px; }
+.equip dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-lg); }
+figure.chart { margin: 0; padding: var(--sp-lg); border-radius: var(--r-xl); background: var(--surface); }
+.chart h4 { margin: 0 0 var(--sp-md); font-size: 15px; line-height: 22.5px; font-weight: 600; }
+.chart svg { display: block; width: 100%; height: auto; }
+.chart .axis, .chart .tick { stroke: var(--line-strong); }
+.chart .crit { stroke: var(--danger); stroke-dasharray: 6 4; }
+.chart .series { fill: none; stroke: var(--action); stroke-width: 2; }
+.chart .dot { fill: var(--action); stroke: var(--surface); stroke-width: 2; }
+.chart .dot.max { fill: var(--danger); r: 7; }
+.chart text { fill: var(--body); font: 14px var(--font); }
+.chart text.val { fill: var(--ink); font-weight: 600; }
+.chart text.crit-label { fill: var(--danger); }
+.table-wrap { margin-bottom: var(--sp-lg); overflow-x: auto; border-radius: var(--r-field); }
+table { width: 100%; border-collapse: collapse; font-size: 14px; line-height: 21px; }
+caption { padding: var(--sp-md) 0; text-align: left; font-weight: 600; }
+th, td { padding: var(--sp-md) var(--sp-lg); border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+thead th { background: var(--surface); color: var(--body); font-weight: 600; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+details.more { margin: var(--sp-lg) 0; padding: 0 var(--sp-lg); border: 1px solid var(--line); border-radius: var(--r-xl); }
+details.more > summary { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-md); min-height: 48px; font-weight: 600; cursor: pointer; }
+details.more[open] > summary { margin-bottom: var(--sp-md); }
+details.more > .hint { margin-bottom: var(--sp-md); }
+.fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sp-lg); padding-bottom: var(--sp-lg); }
+.field label { display: block; margin-bottom: var(--sp-xs); font-size: 14px; line-height: 21px; font-weight: 600; }
+.field input[aria-invalid="true"] { border: 2px solid var(--danger); padding: 0 calc(var(--sp-lg) - 1px); background-color: var(--danger-bg); }
+.err-text { min-height: 21px; margin: var(--sp-xs) 0 0; color: var(--danger); font-size: 14px; line-height: 21px; }
+@media (max-width: 1100px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .grid3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fields { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 900px) {
+  .save .hint { display: none; }
+}
+@media (max-width: 760px) {
+  .grid3, .charts { grid-template-columns: minmax(0, 1fr); }
+  .equip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+  :root { --topbar-h: 65px; }
+  html { scroll-padding-top: 130px; }
+  .topbar { flex-wrap: nowrap; padding: var(--sp-md) var(--sp-lg); }
+  .app { padding: var(--sp-lg); }
+  .sample-flag, .msg { padding-left: var(--sp-lg); padding-right: var(--sp-lg); }
+  .app-title { font-size: 18px; line-height: 27px; }
+  .app-title .sub { display: none; }
+  .save { flex: none; }
+  .fields { grid-template-columns: minmax(0, 1fr); }
+  .verdict-bar { font-size: 20px; line-height: 29px; }
+  .app.empty h2 { font-size: 22px; line-height: 31px; }
+  .app.empty .drop { min-height: 200px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .btn { transition: transform 150ms; }
+  .btn:active:not(:disabled) { transform: scale(0.96); transition-duration: 0s; }
+}
+textarea { width:100%; min-height:88px; padding:12px; border:1px solid var(--field-border); border-radius:var(--r-field); font:inherit; resize:vertical; }
+.file-list { padding-left:24px; overflow-wrap:anywhere; }
+.rail, .results { min-width:0; }
+.skeleton-banner { padding:8px 24px; margin:0; background:var(--warn-bg); font-size:14px; }
+</style>
 </head>
 <body>
-  <header>
-    <div><div class="eyebrow">KTL · A-2 실험 PC 도구</div><h1>유속계 정도검사</h1></div>
-    <span class="badge">설치 없이 실행 · 오프라인</span>
-  </header>
-  <main>
-    <p class="notice"><strong>실행 뼈대입니다.</strong> 화면 이동만 확인할 수 있습니다. QR 검증·CSV 판별·계산·Excel 저장은 아직 제공하지 않습니다.</p>
-    <noscript><p class="notice">화면을 이동하려면 브라우저에서 JavaScript를 허용해 주세요.</p></noscript>
-    <div class="workspace">
-      <nav aria-label="검사 작업 순서">
-        <ol>
-          <li><button type="button" data-step="0" aria-controls="pc-01" aria-current="step">① QR 입력</button></li>
-          <li><button type="button" data-step="1" aria-controls="pc-02">② CSV 넣기</button></li>
-          <li><button type="button" data-step="2" aria-controls="pc-03">③ 계산 확인</button></li>
-          <li><button type="button" data-step="3" aria-controls="pc-04">④ Excel 저장</button></li>
-        </ol>
-      </nav>
-      <div class="card">
-        <section id="pc-01" aria-labelledby="title-01">
-          <h2 id="title-01" tabindex="-1">QR 입력</h2>
-          <p>Pi 화면의 QR을 스캔해 기기 정보를 불러오는 화면입니다.</p>
-          <label for="qr-input">QR 문자열</label>
-          <textarea id="qr-input" spellcheck="false" autocomplete="off" aria-describedby="qr-help" placeholder="QR 입력칸 미리보기"></textarea>
-          <p id="qr-help" class="help">입력값은 검증하거나 저장하지 않습니다. 창을 새로 열면 지워집니다.</p>
-          <button type="button" disabled>QR 검증 준비 중</button>
-        </section>
-        <section id="pc-02" aria-labelledby="title-02" hidden>
-          <h2 id="title-02" tabindex="-1">CSV 넣기·판별</h2>
-          <p>풍동 CSV 6개의 내용을 읽고 반복성·직선성·민감도를 구분할 화면입니다.</p>
-          <div class="placeholder">아직 파일을 읽지 않습니다. CSV 읽기·판별은 후속 이슈에서 연결합니다.</div>
-          <p class="help">cp949 인코딩, 내용 기반 판별, 원본 보존 및 SHA-256 기록을 적용할 예정입니다.</p>
-          <button type="button" disabled>CSV 선택 준비 중</button>
-        </section>
-        <section id="pc-03" aria-labelledby="title-03" hidden>
-          <h2 id="title-03" tabindex="-1">계산 확인</h2>
-          <p>반복성·직선성·설치방향 민감도의 계산 근거를 시험자가 확인할 화면입니다.</p>
-          <div class="placeholder">계산 결과가 없습니다. 현재 표시할 측정값이나 판정은 없습니다.</div>
-          <p class="help">계산식은 공동 문서 02 §5를 따릅니다.</p>
-          <button type="button" disabled>계산 준비 중</button>
-        </section>
-        <section id="pc-04" aria-labelledby="title-04" hidden>
-          <h2 id="title-04" tabindex="-1">Excel 저장</h2>
-          <p>시험자가 확인한 결과를 정해진 시트·셀 위치로 저장할 화면입니다.</p>
-          <div class="placeholder">일반사항 · 반복직선성 · 민감도 · 구조확인 · raw data · 출처</div>
-          <p class="help">Excel 생성 기능은 아직 연결되지 않았습니다.</p>
-          <button type="button" disabled>Excel 저장 준비 중</button>
-        </section>
-        <div class="actions">
-          <button id="previous" type="button" disabled>이전 화면 보기</button>
-          <button id="next" type="button">다음 화면 보기</button>
-        </div>
-        <p id="screen-status" role="status" aria-live="polite">1 / 4 화면 · 입력 처리는 연결 전입니다.</p>
+<a class="skip" href="#main">본문으로 건너뛰기</a>
+<header class="topbar">
+  <h1 class="app-title">유속계 정도검사 <span class="sub">M4·M5 기반 · 실험 PC 도구</span></h1>
+  <div class="save"><button type="button" class="btn large" id="saveBtn" disabled>Excel 만들고 저장</button></div>
+</header>
+<p class="skeleton-banner">실행 뼈대입니다. 파일 목록만 표시하며 QR 검증·내용 판별·계산·Excel 저장은 후속 작업에서 연결합니다.</p>
+<p id="saveMsg" class="msg" role="status">계산 결과와 시험자 확인이 연결되기 전에는 저장할 수 없습니다.</p>
+<p id="status" class="sr-only" role="status" aria-live="polite"></p>
+<noscript><p>파일 목록을 확인하려면 JavaScript를 허용해 주세요.</p></noscript>
+<main id="main" tabindex="-1">
+  <div class="app empty" id="app">
+    <aside class="rail" aria-labelledby="h-rail">
+      <h2 id="h-rail">풍동 프로그램의 CSV 6개를 넣으세요</h2>
+      <p class="lead">파일 선택·끌어놓기 흐름을 확인할 수 있습니다. 파일 내용은 아직 읽지 않습니다.</p>
+      <details class="more" id="qrBox">
+        <summary>QR 입력</summary>
+        <label for="qr-input">Pi QR 문자열</label>
+        <textarea id="qr-input" autocomplete="off" spellcheck="false" aria-describedby="qrHelp"></textarea>
+        <p class="hint" id="qrHelp">입력 미리보기입니다. QR 검증·한글 입력 복원은 연결 전입니다.</p>
+      </details>
+      <label class="drop" id="drop">
+        <input type="file" id="fileInput" aria-label="풍동 CSV 파일 선택" accept=".csv,text/csv" multiple>
+        <strong>CSV 파일을 여기에 끌어다 놓거나, 눌러서 고르세요</strong>
+        <span>여러 개를 한 번에 고를 수 있습니다. 새로 넣으면 이전 목록은 바뀝니다.</span>
+      </label>
+      <div class="row"><button type="button" class="btn weak" id="resetBtn" disabled>선택 초기화</button><span class="hint" id="fileCount">넣은 파일이 없습니다.</span></div>
+      <ul id="fileList" class="file-list" aria-label="선택한 파일"></ul>
+      <div class="slots" id="slots"></div>
+    </aside>
+    <section class="results" id="results" aria-labelledby="h-results" hidden>
+      <h2 id="h-results">계산 결과</h2>
+      <div class="notice warn"><h3>아직 계산하지 않았습니다</h3><p>선택한 파일은 판별 대기 상태입니다. 파일 개수만으로 종류·계산·판정의 정상 여부를 판단하지 않습니다.</p></div>
+      <div class="grid3">
+        <article class="card"><h3>반복성</h3><p>결과 대기</p></article>
+        <article class="card"><h3>직선성</h3><p>결과 대기</p></article>
+        <article class="card"><h3>설치방향 민감도</h3><p>결과 대기</p></article>
       </div>
-    </div>
-  </main>
-  <footer>실행 뼈대 · v0.1.0 · 실제 업무용 결과를 생성하지 않습니다.</footer>
-  <script>
-    'use strict';
-    const steps = [...document.querySelectorAll('[data-step]')];
-    const panels = steps.map(button => document.getElementById(button.getAttribute('aria-controls')));
-    const previous = document.getElementById('previous');
-    const next = document.getElementById('next');
-    let current = 0;
-    function showScreen(index) {
-      if (index < 0 || index >= panels.length) return;
-      current = index;
-      panels.forEach((panel, position) => { panel.hidden = position !== index; });
-      steps.forEach((button, position) => {
-        if (position === index) button.setAttribute('aria-current', 'step');
-        else button.removeAttribute('aria-current');
-      });
-      previous.disabled = index === 0;
-      next.disabled = index === panels.length - 1;
-      document.getElementById('screen-status').textContent = `${index + 1} / 4 화면 · 입력 처리는 연결 전입니다.`;
-      panels[index].querySelector('h2').focus();
-    }
-    steps.forEach((button, index) => button.addEventListener('click', () => showScreen(index)));
-    previous.addEventListener('click', () => showScreen(current - 1));
-    next.addEventListener('click', () => showScreen(current + 1));
-    // TODO(확인 필요): 후속 Excel 이슈에서 단일 HTML의 xlsx 생성·그래프 포함 방식을 결정한다.
-  </script>
+      <h3>Excel로 저장</h3><p class="lead">출력 형식과 시험자 확인 흐름은 후속 이슈에서 연결합니다.</p>
+      <details class="more"><summary>일반사항 값 넣기 (연결 예정)</summary><p class="hint">추가 입력·검증은 아직 제공하지 않습니다.</p></details>
+      <details class="more"><summary>출력 셀 미리보기 (연결 예정)</summary><p class="hint">프로토타입 양식과 공동 계약의 차이를 확인한 뒤 연결합니다.</p></details>
+    </section>
+  </div>
+</main>
+<script>/* M4·M5의 한 화면 작업대를 따르는 실행 뼈대. 견본·계산·템플릿은 포함하지 않는다. */
+'use strict';
+const byId = id => document.getElementById(id);
+const app = byId('app');
+const rail = document.querySelector('.rail');
+const results = byId('results');
+const drop = byId('drop');
+const fileInput = byId('fileInput');
+const reset = byId('resetBtn');
+const slotLabels = ['반복성 결과', '반복성 source', '직선성 결과', '직선성 source', '설치방향 민감도 결과', '설치방향 민감도 source'];
+const state = { files: [] };
+for (const label of slotLabels) {
+  const slot = document.createElement('details');
+  slot.className = 'slot';
+  const summary = document.createElement('summary');
+  const title = document.createElement('span');
+  title.className = 'slot-label';
+  title.textContent = label;
+  const status = document.createElement('span');
+  status.className = 'slot-file';
+  status.textContent = '미배정 · 내용 판별 연결 전';
+  const detail = document.createElement('p');
+  detail.className = 'slot-body why';
+  detail.textContent = '파일명으로 배정하지 않습니다. 후속 판별 기능에서 내용과 근거를 표시합니다.';
+  summary.append(title, status);
+  slot.append(summary, detail);
+  byId('slots').append(slot);
+}
+function updateLayout() {
+  /* 좁은 화면의 시각적 순서와 Tab 순서를 원본처럼 결과 → 파일 패널로 맞춘다. */
+  const active = document.activeElement;
+  const restoreFocus = rail.contains(active) || results.contains(active);
+  const narrow = matchMedia('(max-width: 1100px)').matches;
+  if (narrow && app.firstElementChild !== results) app.prepend(results);
+  if (!narrow && app.firstElementChild !== rail) app.prepend(rail);
+  if (restoreFocus && document.activeElement !== active) active.focus();
+}
+function selectFiles(files) {
+  state.files = Array.from(files);
+  byId('fileList').replaceChildren();
+  for (const file of state.files) {
+    const row = document.createElement('li');
+    row.textContent = `${file.name} · ${file.size.toLocaleString('ko-KR')} 바이트 · 판별 대기`;
+    byId('fileList').append(row);
+  }
+  const count = state.files.length;
+  app.classList.toggle('empty', count === 0);
+  results.hidden = count === 0;
+  reset.disabled = count === 0;
+  byId('h-rail').textContent = count ? '넣은 파일' : '풍동 프로그램의 CSV 6개를 넣으세요';
+  byId('fileCount').textContent = count ? `선택 ${count}개 / 필요 6개 · 내용 판별 전` : '넣은 파일이 없습니다.';
+  byId('status').textContent = count ? `${count}개 파일을 선택했습니다. 내용 판별과 계산은 연결 전입니다.` : '파일 선택을 초기화했습니다.';
+  updateLayout();
+}
+fileInput.addEventListener('change', () => {
+  if (fileInput.files.length) selectFiles(fileInput.files);
+  fileInput.value = '';
+});
+for (const event of ['dragenter', 'dragover']) drop.addEventListener(event, e => {
+  e.preventDefault();
+  drop.classList.add('over');
+});
+for (const event of ['dragleave', 'drop']) drop.addEventListener(event, () => drop.classList.remove('over'));
+drop.addEventListener('drop', e => {
+  e.preventDefault();
+  if (e.dataTransfer.files.length) selectFiles(e.dataTransfer.files);
+});
+for (const event of ['dragover', 'drop']) window.addEventListener(event, e => e.preventDefault());
+reset.addEventListener('click', () => {
+  selectFiles([]);
+  fileInput.focus();
+});
+matchMedia('(max-width: 1100px)').addEventListener('change', updateLayout);
+updateLayout();
+/* TODO(확인 필요): 원본 프로토타입의 계산·Excel 계약 차이를 검토한 후 해당 이슈에서 연결한다. */
+</script>
 </body>
 </html>
