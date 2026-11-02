@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>KTL 유속계 실험 PC 도구</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, sans-serif; color: #1e293b; background: #f1f5f9; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    header, main, footer { max-width: 1080px; margin: auto; padding: 24px; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    h1 { font-size: 24px; margin: 4px 0; }
+    h2 { font-size: 22px; margin-top: 0; }
+    p { line-height: 1.7; }
+    .eyebrow, footer { color: #475569; font-size: 14px; }
+    .badge { border: 1px solid #cbd5e1; border-radius: 24px; padding: 8px 12px; white-space: nowrap; }
+    main { padding-top: 0; }
+    .notice { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 12px; padding: 16px; margin: 0 0 20px; }
+    .workspace { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 24px; }
+    nav ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+    button, textarea { font: inherit; }
+    button { padding: 12px 16px; border: 1px solid #cbd5e1; border-radius: 8px; background: white; color: #334155; cursor: pointer; }
+    nav button { width: 100%; text-align: left; min-height: 52px; }
+    button[aria-current="step"] { background: #1d4ed8; border-color: #1d4ed8; color: white; }
+    button:hover:not(:disabled) { border-color: #1d4ed8; }
+    button:disabled { cursor: not-allowed; color: #64748b; background: #f1f5f9; }
+    :focus-visible { outline: 3px solid #0284c7; outline-offset: 4px; }
+    .card { border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; background: white; min-width: 0; }
+    section { min-height: 280px; }
+    [hidden] { display: none !important; }
+    label { display: block; font-weight: 600; margin-bottom: 8px; }
+    textarea { display: block; resize: vertical; width: 100%; min-height: 100px; padding: 12px; border: 1px solid #94a3b8; border-radius: 8px; }
+    .help { font-size: 14px; color: #475569; }
+    .placeholder { padding: 20px; border: 1px dashed #94a3b8; border-radius: 8px; background: #f8fafc; }
+    .actions { display: flex; gap: 12px; justify-content: space-between; border-top: 1px solid #e2e8f0; padding-top: 16px; margin-top: 24px; }
+    #screen-status { margin: 16px 0 0; font-size: 14px; color: #475569; }
+    footer { padding-top: 0; line-height: 1.6; }
+    @media (max-width: 700px) {
+      header { align-items: flex-start; flex-direction: column; }
+      header, main, footer { padding-left: 16px; padding-right: 16px; }
+      .workspace { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+      nav ol { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .card { padding: 20px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div><div class="eyebrow">KTL · A-2 실험 PC 도구</div><h1>유속계 정도검사</h1></div>
+    <span class="badge">설치 없이 실행 · 오프라인</span>
+  </header>
+  <main>
+    <p class="notice"><strong>실행 뼈대입니다.</strong> 화면 이동만 확인할 수 있습니다. QR 검증·CSV 판별·계산·Excel 저장은 아직 제공하지 않습니다.</p>
+    <noscript><p class="notice">화면을 이동하려면 브라우저에서 JavaScript를 허용해 주세요.</p></noscript>
+    <div class="workspace">
+      <nav aria-label="검사 작업 순서">
+        <ol>
+          <li><button type="button" data-step="0" aria-controls="pc-01" aria-current="step">① QR 입력</button></li>
+          <li><button type="button" data-step="1" aria-controls="pc-02">② CSV 넣기</button></li>
+          <li><button type="button" data-step="2" aria-controls="pc-03">③ 계산 확인</button></li>
+          <li><button type="button" data-step="3" aria-controls="pc-04">④ Excel 저장</button></li>
+        </ol>
+      </nav>
+      <div class="card">
+        <section id="pc-01" aria-labelledby="title-01">
+          <h2 id="title-01" tabindex="-1">QR 입력</h2>
+          <p>Pi 화면의 QR을 스캔해 기기 정보를 불러오는 화면입니다.</p>
+          <label for="qr-input">QR 문자열</label>
+          <textarea id="qr-input" spellcheck="false" autocomplete="off" aria-describedby="qr-help" placeholder="QR 입력칸 미리보기"></textarea>
+          <p id="qr-help" class="help">입력값은 검증하거나 저장하지 않습니다. 창을 새로 열면 지워집니다.</p>
+          <button type="button" disabled>QR 검증 준비 중</button>
+        </section>
+        <section id="pc-02" aria-labelledby="title-02" hidden>
+          <h2 id="title-02" tabindex="-1">CSV 넣기·판별</h2>
+          <p>풍동 CSV 6개의 내용을 읽고 반복성·직선성·민감도를 구분할 화면입니다.</p>
+          <div class="placeholder">아직 파일을 읽지 않습니다. CSV 읽기·판별은 후속 이슈에서 연결합니다.</div>
+          <p class="help">cp949 인코딩, 내용 기반 판별, 원본 보존 및 SHA-256 기록을 적용할 예정입니다.</p>
+          <button type="button" disabled>CSV 선택 준비 중</button>
+        </section>
+        <section id="pc-03" aria-labelledby="title-03" hidden>
+          <h2 id="title-03" tabindex="-1">계산 확인</h2>
+          <p>반복성·직선성·설치방향 민감도의 계산 근거를 시험자가 확인할 화면입니다.</p>
+          <div class="placeholder">계산 결과가 없습니다. 현재 표시할 측정값이나 판정은 없습니다.</div>
+          <p class="help">계산식은 공동 문서 02 §5를 따릅니다.</p>
+          <button type="button" disabled>계산 준비 중</button>
+        </section>
+        <section id="pc-04" aria-labelledby="title-04" hidden>
+          <h2 id="title-04" tabindex="-1">Excel 저장</h2>
+          <p>시험자가 확인한 결과를 정해진 시트·셀 위치로 저장할 화면입니다.</p>
+          <div class="placeholder">일반사항 · 반복직선성 · 민감도 · 구조확인 · raw data · 출처</div>
+          <p class="help">Excel 생성 기능은 아직 연결되지 않았습니다.</p>
+          <button type="button" disabled>Excel 저장 준비 중</button>
+        </section>
+        <div class="actions">
+          <button id="previous" type="button" disabled>이전 화면 보기</button>
+          <button id="next" type="button">다음 화면 보기</button>
+        </div>
+        <p id="screen-status" role="status" aria-live="polite">1 / 4 화면 · 입력 처리는 연결 전입니다.</p>
+      </div>
+    </div>
+  </main>
+  <footer>실행 뼈대 · v0.1.0 · 실제 업무용 결과를 생성하지 않습니다.</footer>
+  <script>
+    'use strict';
+    const steps = [...document.querySelectorAll('[data-step]')];
+    const panels = steps.map(button => document.getElementById(button.getAttribute('aria-controls')));
+    const previous = document.getElementById('previous');
+    const next = document.getElementById('next');
+    let current = 0;
+    function showScreen(index) {
+      if (index < 0 || index >= panels.length) return;
+      current = index;
+      panels.forEach((panel, position) => { panel.hidden = position !== index; });
+      steps.forEach((button, position) => {
+        if (position === index) button.setAttribute('aria-current', 'step');
+        else button.removeAttribute('aria-current');
+      });
+      previous.disabled = index === 0;
+      next.disabled = index === panels.length - 1;
+      document.getElementById('screen-status').textContent = `${index + 1} / 4 화면 · 입력 처리는 연결 전입니다.`;
+      panels[index].querySelector('h2').focus();
+    }
+    steps.forEach((button, index) => button.addEventListener('click', () => showScreen(index)));
+    previous.addEventListener('click', () => showScreen(current - 1));
+    next.addEventListener('click', () => showScreen(current + 1));
+    // TODO(확인 필요): 후속 Excel 이슈에서 단일 HTML의 xlsx 생성·그래프 포함 방식을 결정한다.
+  </script>
+</body>
+</html>
