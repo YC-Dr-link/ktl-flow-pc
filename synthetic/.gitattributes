@@ -1,0 +1,2 @@
+set_*/*.csv -text whitespace=trailing-space,space-before-tab,cr-at-eol linguist-generated=true
+set_*/expected.json text eol=lf linguist-generated=true
