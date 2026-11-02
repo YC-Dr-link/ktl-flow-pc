@@ -1,0 +1,16 @@
+[
+  {
+    "name": "balanced", "maximum": 20,
+    "repeatability_measured": [1.76,15.92,1.78,15.96,1.8,16,1.82,16.04,1.84,16.08],
+    "linearity_reference": [6,14], "linearity_error_pct": [[1,-1,2,-2,0],[-1,1,-2,2,0]],
+    "sensitivity_mean_pct": [0.2,0.4,-0.6,0.8,-1,1.2,-1.4,1.6,-1.8,2],
+    "expected": {"repeatability": [0.15811388300841897,0.31622776601683794], "max_absolute": [2,2], "signed_mean": [0,0], "sensitivity": 2}
+  },
+  {
+    "name": "signed-bias", "maximum": 30,
+    "repeatability_measured": [2.1,22.8,2.4,23.4,2.7,24,3,24.6,3.3,25.2],
+    "linearity_reference": [9,21], "linearity_error_pct": [[5,6,7,8,9],[-4,-5,-6,-7,-8]],
+    "sensitivity_mean_pct": [0.5,-0.8,1,-1.2,2,-2.4,3.2,-3.6,4.4,-4.8],
+    "expected": {"repeatability": [1.5811388300841898,3.1622776601683795], "max_absolute": [9,8], "signed_mean": [7,-6], "sensitivity": 4.8}
+  }
+]
