@@ -4,7 +4,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-FhbmUBRcBEoyqEdSx40A7Lf5AI85ZBVrQaXhY3dsNLc='; style-src 'sha256-bXBKAoTGA6nKZ0/eF23M9KwcbJCYNgF1IT25LZ9VnV0='; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-FhbmUBRcBEoyqEdSx40A7Lf5AI85ZBVrQaXhY3dsNLc='; style-src 'sha256-8JqOr9rQ9t//MBQVPnqYeUKKnEYhDTyh/F7GFclIbUo='; connect-src 'none'; form-action 'none'; base-uri 'none'">
 <title>유속계 정도검사 M4·M5</title>
 <style>
 /* 화면 전체 스타일 (디자인 시안 v2). 색·간격·반경은 :root 토큰만 쓴다. 글자 대비 4.5:1, 경계·초점 3:1 이상으로 값을 골랐다 */
@@ -69,7 +69,7 @@ body { margin: 0; background: var(--canvas); color: var(--ink); font: 400 16px/2
 main { max-width: 1260px; margin: 0 auto; }
 .app { display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: var(--sp-xl); align-items: start; padding: var(--sp-xl); }
 /* 저장 화면(2단계): 한 열, 왼쪽 정렬, 내용 폭 최대 1008px */
-.save-screen { padding: var(--sp-xl) max(var(--sp-xl), calc((100vw - 1260px) / 2 + var(--sp-xl))); }
+.save-screen { padding: var(--sp-xl); }
 .save-screen > * { max-width: 1008px; }
 .save-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-lg); margin-bottom: var(--sp-md); }
 .save-head h2 { margin: 0; font-size: 26px; line-height: 35px; font-weight: 700; }
@@ -254,7 +254,7 @@ html.modal-open { overflow: hidden; }
 }
 
 /* PC-01 QR 입력 화면 (관문 2): 새 색·글꼴 없이 기존 토큰만 쓴다 */
-.qr-screen { padding: var(--sp-xl) max(var(--sp-xl), calc((100vw - 1260px) / 2 + var(--sp-xl))); }
+.qr-screen { padding: var(--sp-xl); }
 .qr-screen > * { max-width: 1008px; }
 .qr-screen h2 { font-size: 26px; line-height: 35px; font-weight: 700; margin-bottom: var(--sp-lg); }
 .qr-screen h2:focus-visible { outline: none; }
