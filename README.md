@@ -30,5 +30,5 @@ tests/
 ## 실행
 
 1. `m4m5.html`을 Chrome 또는 Edge로 연다 (설치 · 인터넷 필요 없음).
-2. 풍동 CSV 6개를 넣고 결과를 확인한다.
-3. 저장 화면에서 Excel 양식 파일(.xlsx)을 고르고 「Excel 저장」을 누른다. 양식은 한 번 고르면 기억한다 (시험용 합성 양식: `synthetic/template_synthetic.xlsx`).
+2. CSV 6개를 직접 넣거나 장비 출력 폴더를 선택하고, 새 검사분이 준비되면 「반영」을 누른다.
+3. 저장 화면에서 양식(.xlsx)을 고르고 「Excel 저장」을 눌러 저장 폴더와 파일명을 지정한다 (합성 양식: `synthetic/template_synthetic.xlsx`).
