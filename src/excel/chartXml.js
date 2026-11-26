@@ -18,8 +18,13 @@ function setPoint(doc, cache, idx, text) {
 }
 
 // title: 계열 이름(평균 유속 문자열), yValues: 각도 −10, −5, 0, +5, +10 순서의 그룹 값 5개
-export function updateChart(xml, { title, yValues }) {
+export function updateChart(xml, { title, yValues }, titleReference = null) {
   const doc = parseXml(xml);
+  if (titleReference) {
+    const ref = byTag(byTag(doc, 'c:title')[0], 'c:f')[0];
+    if (!ref) throw new Error('양식 차트의 제목 참조 셀을 읽지 못했습니다.');
+    ref.textContent = titleReference;
+  }
   const titleCache = byTag(byTag(doc, 'c:title')[0], 'c:strCache')[0];
   setPoint(doc, titleCache, 0, title);
 
