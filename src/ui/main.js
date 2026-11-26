@@ -12,6 +12,7 @@ import { noticeList } from './noticeList.js';
 import { safeDownloadName } from './fileName.js';
 import { createFolderWatch, focusAfter } from './folderWatch.js';
 import { createReceiptForm } from './receiptForm.js';
+import { WORKBOOK_LIMITS } from '../excel/workbookSafety.js';
 
 const $ = (id) => document.getElementById(id);
 const fromBase64 = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
@@ -106,11 +107,13 @@ async function restoreTemplate() {
 }
 async function onTemplate(file) {
   if (!file) return;
-  const bytes = new Uint8Array(await file.arrayBuffer());
+  let bytes;
   try {
+    if (file.size > WORKBOOK_LIMITS.compressed) throw new Error('양식 파일은 25 MB 이하여야 합니다.');
+    bytes = new Uint8Array(await file.arrayBuffer());
     await checkTemplate(bytes);
   } catch (e) {
-    syncTemplate(e.message); // checkTemplate의 오류는 화면에 보여 줄 한국어 문구다
+    syncTemplate(e instanceof DOMException ? '양식 파일을 읽지 못했습니다. 접근 권한을 확인하고 다시 선택하세요.' : e.message);
     return;
   }
   state.template = { name: file.name, bytes };
@@ -239,9 +242,10 @@ async function onPrevious(file) {
   };
   let prev;
   try {
+    if (file.size > WORKBOOK_LIMITS.compressed) throw new Error('작년 파일은 25 MB 이하여야 합니다.');
     prev = await readPreviousGeneral(new Uint8Array(await file.arrayBuffer()));
   } catch (e) {
-    show(e.message, true); // readPreviousGeneral의 오류는 화면에 보여 줄 한국어 문구다
+    show(e instanceof DOMException ? '작년 파일을 읽지 못했습니다. 접근 권한을 확인하고 다시 선택하세요.' : e.message, true);
     return;
   }
   const now = state.analysis?.result?.equipment.serial;
@@ -267,8 +271,16 @@ async function onPrevious(file) {
 async function onFiles(fileList) {
   const picked = [...fileList];
   if (!picked.length) return;
-  const files = await Promise.all(picked.map(async (f) => ({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) })));
-  load(files);
+  try {
+    if (picked.length > 6 || picked.some(f => f.size > WORKBOOK_LIMITS.compressed)) {
+      throw new Error('CSV는 한 검사분 6개까지, 파일당 25 MB 이하로 선택하세요.');
+    }
+    const files = await Promise.all(picked.map(async (f) => ({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) })));
+    load(files);
+  } catch (error) {
+    load([]);
+    setMsg('failed', 'err', error instanceof DOMException ? 'CSV를 읽지 못했습니다. 접근 권한을 확인하고 다시 선택하세요.' : error.message);
+  }
 }
 
 // 결과 화면 → 저장 화면 (FR-M5-08). 패널·결과는 숨기기만 하고 상태는 그대로 둔다. 내려받기는 하지 않는다
@@ -367,6 +379,13 @@ $('fileInput').addEventListener('change', (e) => {
 $('templateInput').addEventListener('change', async (e) => {
   await onTemplate(e.target.files[0]);
   e.target.value = '';
+});
+$('forgetTemplate').addEventListener('click', () => {
+  if (excelSaving) return;
+  state.template = null;
+  try { localStorage.removeItem(TEMPLATE_KEY); } catch { /* 이번 실행의 선택도 함께 지운다. */ }
+  syncTemplate();
+  setMsg('', '', '기억한 양식을 지웠습니다. 저장 전에 양식을 다시 선택하세요.');
 });
 $('prevInput').addEventListener('change', async (e) => {
   await onPrevious(e.target.files[0]);

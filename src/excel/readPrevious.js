@@ -1,10 +1,10 @@
 // 작년 Excel(이 도구가 만든 파일 또는 같은 양식의 xlsx · xlsm)의 일반사항 시트에서 저장 화면 입력 값을 읽는다 (#24)
 // TODO(확인 필요): 연구원이 손으로 만든 실제 xlsm이 같은 셀 위치 · 날짜 표기인지 (Q13)
-import JSZip from 'jszip';
 import defaultConfig from '../config.js';
 import { OPTIONAL_FIELDS } from './cellValues.js';
 import { parseXml, readCell } from './sheetXml.js';
 import { sheetPaths } from './buildXlsx.js';
+import { loadWorkbook } from './workbookSafety.js';
 
 // 작년 값을 불러오는 입력 키 (PM 목록). 접수일자(G3) · 참조 성적서 번호(G13)는 올해 값이라 뺀다
 const CARRY_KEYS = ['representative', 'phone', 'maker', 'approvalNumber', 'approvalDate', 'firstInspectionDate', 'pitotType', 'pitotSerial'];
@@ -43,8 +43,9 @@ export async function readPreviousGeneral(bytes, config = defaultConfig) {
 async function readGeneral(bytes, config) {
   let zip;
   try {
-    zip = await JSZip.loadAsync(bytes);
-  } catch {
+    zip = await loadWorkbook(bytes, { output: false });
+  } catch (error) {
+    if (error.message.startsWith('Excel 양식을 사용할 수 없습니다.')) throw fail(error.message);
     throw fail('Excel 파일(.xlsx · .xlsm)이 아닙니다.');
   }
   const read = (p) => zip.file(p)?.async('string');

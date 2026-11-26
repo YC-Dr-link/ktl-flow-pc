@@ -1,10 +1,10 @@
 // 양식 xlsx 바이트에 셀 값과 차트 캐시를 채워 결과 xlsx 바이트와 파일 이름을 만든다
-import JSZip from 'jszip';
 import defaultConfig from '../config.js';
 import { cellValues, chartValues } from './cellValues.js';
 import { parseXml, setCells, toXml, splitRef } from './sheetXml.js';
 import { updateChart } from './chartXml.js';
 import { prepareProvenance, appendProvenance, sourceRawCells, rawLocation } from './provenance.js';
+import { loadWorkbook } from './workbookSafety.js';
 
 const REL_NS_PATH = 'xl/_rels/workbook.xml.rels';
 
@@ -67,8 +67,9 @@ export async function checkTemplate(bytes, config = defaultConfig) {
   const notXlsx = () => new Error('Excel 양식 파일(.xlsx)이 아닙니다.');
   let zip;
   try {
-    zip = await JSZip.loadAsync(bytes);
-  } catch {
+    zip = await loadWorkbook(bytes);
+  } catch (error) {
+    if (error.message.startsWith('Excel 양식을 사용할 수 없습니다.')) throw error;
     throw notXlsx();
   }
   const workbook = zip.file('xl/workbook.xml');
@@ -86,7 +87,7 @@ export async function checkTemplate(bytes, config = defaultConfig) {
 export async function buildXlsx(templateBytes, result, summaries, optional = {}, config = defaultConfig, source = null) {
   if (!result || !summaries) throw new Error('검증을 통과한 결과가 없어 Excel을 만들 수 없습니다.');
   const provenance = source ? await prepareProvenance(source.files, source.analysis, result, source.confirmedAt) : null;
-  const zip = await JSZip.loadAsync(templateBytes);
+  const zip = await loadWorkbook(templateBytes);
   const read = (path) => zip.file(path).async('string');
 
   const paths = sheetPaths(await read('xl/workbook.xml'), await read(REL_NS_PATH));
