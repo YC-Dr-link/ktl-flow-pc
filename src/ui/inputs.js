@@ -1,6 +1,6 @@
 // CSV에 없는 일반사항 값을 받는 선택 입력 폼 (FR-M5-05). 키는 excel/cellValues.js의 선택 입력 키와 같다
 import { h, clear } from './dom.js';
-import { parseNumber } from '../core/csv.js';
+import { parseNumber, parseDate } from '../core/csv.js';
 
 // date: 날짜 칸(꼴이 다르면 노란 안내, 저장은 막지 않음), hint: 칸 아래 늘 보이는 도움말 (#24)
 const FIELDS = [
@@ -26,7 +26,7 @@ export const eunNeun = (name) => {
 };
 
 // 날짜 칸이 받는 꼴: 「YYYY년 MM월 DD일」 또는 「YYYY.MM.DD」(월 · 일 두 자리). TODO(확인 필요): 양식 칸마다 어느 꼴인지 (Q13)
-export const isDateText = (v) => /^\d{4}년 \d{2}월 \d{2}일$/.test(v) || /^\d{4}\.\d{2}\.\d{2}$/.test(v);
+export const isDateText = (v) => Boolean(parseDate(v)) && (/^\d{4}년 \d{2}월 \d{2}일$/.test(v) || /^\d{4}\.\d{2}\.\d{2}$/.test(v));
 const DATE_HELP = '날짜는 2025년 10월 17일 또는 2025.10.17처럼 넣으세요. 맞으면 그대로 저장해도 됩니다.';
 const FROM_LAST_YEAR = '작년 파일에서 불러옴';
 

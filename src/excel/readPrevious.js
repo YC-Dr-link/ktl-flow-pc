@@ -10,9 +10,14 @@ import { loadWorkbook } from './workbookSafety.js';
 const CARRY_KEYS = ['representative', 'phone', 'maker', 'approvalNumber', 'approvalDate', 'firstInspectionDate', 'pitotType', 'pitotSerial'];
 const DATE_KEYS = new Set(['approvalDate', 'firstInspectionDate', 'previousInspectionDate']);
 
-// Excel 날짜 일련번호(1900 날짜 체계) → 「YYYY년 MM월 DD일». TODO(확인 필요): 양식 칸의 날짜 표기
-export function excelDateText(serial) {
-  const d = new Date(Date.UTC(1899, 11, 30) + Math.floor(serial) * 86400000); // 시각(소수)은 버린다
+// workbookPr.date1904에 맞춰 읽는다. 1900 체계의 가짜 2월 29일(60)은 받아들이지 않는다.
+export function excelDateText(serial, date1904 = false) {
+  const days = Math.floor(serial); // 시각(소수)은 버린다
+  if (!Number.isFinite(serial) || days < 0 || days > (date1904 ? 2957003 : 2958465) || (!date1904 && days === 60)) {
+    throw fail('작년 파일의 날짜 숫자가 올바르지 않습니다. 해당 날짜 칸을 확인하세요.');
+  }
+  const epoch = date1904 ? Date.UTC(1904, 0, 1) : Date.UTC(1899, 11, days < 60 ? 31 : 30);
+  const d = new Date(epoch + days * 86400000);
   const pad = (n) => String(n).padStart(2, '0');
   return `${d.getUTCFullYear()}년 ${pad(d.getUTCMonth() + 1)}월 ${pad(d.getUTCDate())}일`;
 }
@@ -52,6 +57,9 @@ async function readGeneral(bytes, config) {
   const [workbook, rels] = await Promise.all([read('xl/workbook.xml'), read('xl/_rels/workbook.xml.rels')]);
   if (!workbook || !rels) throw fail('Excel 파일(.xlsx · .xlsm)이 아닙니다.');
   const general = config.sheetNames[0];
+  const dateSystem = parseXml(workbook).getElementsByTagName('workbookPr')[0]?.getAttribute('date1904') || '0';
+  if (!['0', '1', 'false', 'true'].includes(dateSystem)) throw fail('작년 파일의 날짜 체계를 읽지 못했습니다. Excel에서 파일을 확인하세요.');
+  const date1904 = dateSystem === '1' || dateSystem === 'true';
   const path = sheetPaths(workbook, rels)[general];
   const sheetXml = path && (await read(path));
   if (!sheetXml) throw fail(`작년 파일에 '${general}' 시트가 없습니다.`);
@@ -63,7 +71,7 @@ async function readGeneral(bytes, config) {
   // 칸 값 → 입력 글자. 「-」(빈칸 표시)와 빈 값은 없음으로 본다
   const asText = (key, v) => {
     if (v == null || (typeof v === 'number' && Number.isNaN(v))) return '';
-    if (typeof v === 'number' && DATE_KEYS.has(key)) return excelDateText(v);
+    if (typeof v === 'number' && DATE_KEYS.has(key)) return excelDateText(v, date1904);
     const t = String(v).trim();
     return t === config.optionalBlank ? '' : t;
   };
