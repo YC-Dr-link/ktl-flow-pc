@@ -1,6 +1,7 @@
 // 검증을 통과한 요약 파일 3개에서 반복성·직선성·민감도·환경 조건·장비 정보를 계산한다 (CALCULATION 4절)
 import { headerValue, parseDate, parseNumber } from './csv.js';
 import { formatRounded } from './round.js';
+import { splitRequester } from './receipt.js';
 import { judge, overallJudgement } from './judge.js';
 
 const sum = (a) => a.reduce((x, y) => x + y, 0);
@@ -36,12 +37,12 @@ export function formatTestDate(text) {
 
 function equipment(file, config) {
   const b1 = headerValue(file, 1);
-  const space = b1.search(/\s/);
-  const receiptNo = config.receiptNoMode === 'left15' ? b1.slice(0, 15) : space < 0 ? b1 : b1.slice(0, space);
-  const company = space < 0 ? '' : b1.slice(space).trim();
+  const split = splitRequester(b1);
   return {
-    receipt_no: receiptNo,
-    company,
+    receipt_no: config.receiptNoMode === 'left15' ? b1.slice(0, 15) : split.receipt_no,
+    company: split.company,
+    receipt_problem: split.problem, // null | 'glued' | 'format' (#23). 있으면 저장 화면에서 사람이 확인해야 저장된다
+    requester_raw: b1, // CSV 1행 원문 (저장 화면에 보여 준다)
     address: headerValue(file, 2),
     instrument_kind: headerValue(file, 3),
     model: headerValue(file, 4),
