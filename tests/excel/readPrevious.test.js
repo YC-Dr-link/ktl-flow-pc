@@ -12,7 +12,7 @@ const template = () => new Uint8Array(fs.readFileSync(SYNTHETIC_TEMPLATE_PATH));
 const { result, summaries } = analyze(toList(loadSample('set_a')));
 // 작년에 이 도구로 저장했다고 치는 값 (가짜)
 const LAST_YEAR = {
-  representative: '홍길동',
+  representative: 'SYNTH 대표',
   phone: '055-000-0000',
   maker: 'SYNTH 제작',
   approvalNumber: 'SYNTH-A-001',
@@ -32,7 +32,7 @@ describe('readPreviousGeneral', () => {
     const prev = await readPreviousGeneral(bytes);
     assert.equal(prev.serial, SERIAL);
     assert.deepEqual(prev.values, {
-      representative: '홍길동',
+      representative: 'SYNTH 대표',
       phone: '055-000-0000',
       maker: 'SYNTH 제작',
       approvalNumber: 'SYNTH-A-001',
@@ -63,5 +63,44 @@ describe('readPreviousGeneral', () => {
   it('날짜 칸이 Excel 날짜 숫자면 「YYYY년 MM월 DD일」로 바꾼다', () => {
     assert.equal(excelDateText(45000), '2023년 03월 15일');
     assert.equal(excelDateText(41516), '2013년 08월 30일');
+  });
+});
+
+// 손으로 만든 양식처럼 일반사항 시트를 직접 쓴 xlsx (공유 문자열 · 윗주 · 공식 캐시 · 날짜 숫자 · 빈 D8)
+async function handMade(cellsXml, sstItems) {
+  const zip = await JSZip.loadAsync(template());
+  const wb = await zip.file('xl/workbook.xml').async('string');
+  const rels = await zip.file('xl/_rels/workbook.xml.rels').async('string');
+  const id = /<sheet name="일반사항" sheetId="\d+" r:id="(rId\d+)"/.exec(wb)[1];
+  const target = new RegExp(`Id="${id}"[^>]*Target="([^"]+)"`).exec(rels)[1];
+  zip.file(`xl/${target}`, `<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1">${cellsXml}</row></sheetData></worksheet>`);
+  zip.file('xl/sharedStrings.xml', `<?xml version="1.0" encoding="UTF-8"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${sstItems.join('')}</sst>`);
+  return zip.generateAsync({ type: 'uint8array' });
+}
+
+describe('readPreviousGeneral — 손으로 만든 양식', () => {
+  it('공유 문자열의 윗주(rPh)는 빼고, 서식 조각(r)은 이어 붙인다. 공식 칸은 캐시 값, 날짜 숫자는 날짜 글자', async () => {
+    const bytes = await handMade(
+      '<c r="D8" t="s"><v>0</v></c><c r="G7" t="s"><v>1</v></c><c r="D9" t="str"><f>A1</f><v>SYNTH-A-009</v></c><c r="D10"><v>41516</v></c><c r="G6" t="s"><v>2</v></c>',
+      ['<si><t>SYNTH-0001</t></si>', '<si><r><t>SYNTH </t></r><r><t>제작</t></r><rPh sb="0" eb="1"><t>しんせ</t></rPh></si>', '<si><t>ST-3</t></si>'],
+    );
+    const prev = await readPreviousGeneral(bytes);
+    assert.equal(prev.serial, 'SYNTH-0001');
+    assert.deepEqual([prev.values.maker, prev.values.approvalNumber, prev.values.approvalDate, prev.values.unitNumber], ['SYNTH 제작', 'SYNTH-A-009', '2013년 08월 30일', '3']);
+  });
+
+  it('D8(기기 번호)이 비면 serial은 빈 글자다 (화면에서 채우지 않는다)', async () => {
+    const prev = await readPreviousGeneral(await handMade('<c r="G7" t="s"><v>0</v></c>', ['<si><t>SYNTH 제작</t></si>']));
+    assert.equal(prev.serial, '');
+  });
+
+  it('깨진 XML이면 한국어로 알린다', async () => {
+    const zip = await JSZip.loadAsync(template());
+    zip.file('xl/worksheets/sheet1.xml', '<worksheet><sheetData><row>');
+    await assert.rejects(readPreviousGeneral(await zip.generateAsync({ type: 'uint8array' })), { message: '작년 파일을 읽지 못했습니다. 파일이 손상되지 않았는지 확인하세요.' });
+  });
+
+  it('시각이 들어간 날짜 숫자도 그날로 (반올림하지 않는다)', () => {
+    assert.equal(excelDateText(41516.6), '2013년 08월 30일');
   });
 });

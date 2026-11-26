@@ -12,28 +12,50 @@ const DATE_KEYS = new Set(['approvalDate', 'firstInspectionDate', 'previousInspe
 
 // Excel 날짜 일련번호(1900 날짜 체계) → 「YYYY년 MM월 DD일». TODO(확인 필요): 양식 칸의 날짜 표기
 export function excelDateText(serial) {
-  const d = new Date(Date.UTC(1899, 11, 30) + Math.round(serial) * 86400000);
+  const d = new Date(Date.UTC(1899, 11, 30) + Math.floor(serial) * 86400000); // 시각(소수)은 버린다
   const pad = (n) => String(n).padStart(2, '0');
   return `${d.getUTCFullYear()}년 ${pad(d.getUTCMonth() + 1)}월 ${pad(d.getUTCDate())}일`;
 }
 
-// bytes: 고른 파일. 반환: { serial(D8 기기 번호), values: { 입력 키: 글자 } }
+// 공유 문자열 하나: 직계 <t>와 서식 조각 <r>/<t>만 잇는다. 윗주(<rPh>)의 <t>는 뺀다
+const kids = (el, name) => [...el.childNodes].filter((n) => n.nodeType === 1 && (n.localName || n.nodeName) === name);
+const siText = (si) => [...kids(si, 't'), ...kids(si, 'r').flatMap((r) => kids(r, 't'))].map((t) => t.textContent).join('');
+
+const KNOWN_ERRORS = new Set();
+const fail = (message) => {
+  const e = new Error(message);
+  KNOWN_ERRORS.add(e);
+  return e;
+};
+
+// bytes: 고른 파일. 반환: { serial(D8 기기 번호, 못 읽으면 ''), values: { 입력 키: 글자 } }.
+// 오류는 모두 화면에 보여 줄 한국어 문구로 던진다 (원문은 개발자 도구에만)
 export async function readPreviousGeneral(bytes, config = defaultConfig) {
+  try {
+    return await readGeneral(bytes, config);
+  } catch (e) {
+    if (KNOWN_ERRORS.has(e)) throw e;
+    console.error(e);
+    throw new Error('작년 파일을 읽지 못했습니다. 파일이 손상되지 않았는지 확인하세요.');
+  }
+}
+
+async function readGeneral(bytes, config) {
   let zip;
   try {
     zip = await JSZip.loadAsync(bytes);
   } catch {
-    throw new Error('Excel 파일(.xlsx · .xlsm)이 아닙니다.');
+    throw fail('Excel 파일(.xlsx · .xlsm)이 아닙니다.');
   }
   const read = (p) => zip.file(p)?.async('string');
   const [workbook, rels] = await Promise.all([read('xl/workbook.xml'), read('xl/_rels/workbook.xml.rels')]);
-  if (!workbook || !rels) throw new Error('Excel 파일(.xlsx · .xlsm)이 아닙니다.');
+  if (!workbook || !rels) throw fail('Excel 파일(.xlsx · .xlsm)이 아닙니다.');
   const general = config.sheetNames[0];
   const path = sheetPaths(workbook, rels)[general];
   const sheetXml = path && (await read(path));
-  if (!sheetXml) throw new Error(`작년 파일에 '${general}' 시트가 없습니다.`);
+  if (!sheetXml) throw fail(`작년 파일에 '${general}' 시트가 없습니다.`);
   const sstXml = await read('xl/sharedStrings.xml');
-  const sst = sstXml ? [...parseXml(sstXml).getElementsByTagName('si')].map((si) => [...si.getElementsByTagName('t')].map((t) => t.textContent).join('')) : [];
+  const sst = sstXml ? [...parseXml(sstXml).getElementsByTagName('si')].map(siText) : [];
   const cells = new Map([...parseXml(sheetXml).getElementsByTagName('c')].map((c) => [c.getAttribute('r'), c]));
   const cell = (ref) => (cells.has(ref) ? readCell(cells.get(ref), sst) : null);
 
@@ -51,10 +73,10 @@ export async function readPreviousGeneral(bytes, config = defaultConfig) {
   }
   const coef = asText('pitotCoefficient', cell('H11'));
   if (coef) values.pitotCoefficient = coef;
-  // G6 「ST 2」 → 2 (config.unitNumberLabel의 앞뒤 글자를 뗀다)
-  const [pre, post] = config.unitNumberLabel.split('{값}');
+  // G6 「ST 2」 → 2. 손으로 쓴 「ST2」 · 「ST-2」도 앞 글자(config.unitNumberLabel의 {값} 앞)를 뗀다
+  const pre = config.unitNumberLabel.split('{값}')[0].trim();
   const unit = asText('unitNumber', cell('G6'));
-  if (unit) values.unitNumber = unit.startsWith(pre) && unit.endsWith(post) ? unit.slice(pre.length, unit.length - post.length).trim() : unit;
+  if (unit) values.unitNumber = pre && unit.startsWith(pre) ? unit.slice(pre.length).replace(/^[\s-]+/, '').trim() : unit;
   // 작년 시험일(D11)은 올해의 직전 정도검사일
   const lastTest = asText('previousInspectionDate', cell('D11'));
   if (lastTest) values.previousInspectionDate = lastTest;

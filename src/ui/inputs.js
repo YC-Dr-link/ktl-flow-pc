@@ -1,5 +1,6 @@
 // CSV에 없는 일반사항 값을 받는 선택 입력 폼 (FR-M5-05). 키는 excel/cellValues.js의 선택 입력 키와 같다
 import { h, clear } from './dom.js';
+import { parseNumber } from '../core/csv.js';
 
 // date: 날짜 칸(꼴이 다르면 노란 안내, 저장은 막지 않음), hint: 칸 아래 늘 보이는 도움말 (#24)
 const FIELDS = [
@@ -32,7 +33,7 @@ const FROM_LAST_YEAR = '작년 파일에서 불러옴';
 // 클라이언트 검증: 숫자 칸만 확인한다(저장을 막음). 반환: 오류 문구 | ''
 function check(field, value) {
   const v = value.trim();
-  if (field.numeric && v && !Number.isFinite(Number(v.replace(',', '.')))) return `${field.label}${eunNeun(field.label)} 숫자로 입력하세요.`;
+  if (field.numeric && v && !Number.isFinite(parseNumber(v.replace(',', '.')))) return `${field.label}${eunNeun(field.label)} 숫자로 입력하세요.`; // 저장(cellValues.js)과 같은 숫자 판정
   return '';
 }
 // 날짜 꼴 안내: 저장은 막지 않는다 (#24)
@@ -50,7 +51,9 @@ export function createOptionalForm(form, onChange) {
     const input = inputs[field.key];
     const err = check(field, input.value);
     const warn = warnOf(field, input.value);
-    const msg = err || warn || (from.has(field.key) ? FROM_LAST_YEAR : '');
+    // 작년 파일에서 온 칸은 날짜 안내가 있어도 어디서 왔는지 함께 보인다
+    const fromText = from.has(field.key) ? FROM_LAST_YEAR : '';
+    const msg = err || (warn ? (fromText ? `${fromText} · ${warn}` : warn) : fromText);
     const note = notes[field.key];
     if (note.textContent !== msg) note.textContent = msg; // 같은 문구를 다시 쓰면 키를 칠 때마다 다시 읽힌다
     note.className = `err-text${!err && warn ? ' warn' : ''}${!err && !warn && msg ? ' from' : ''}`;

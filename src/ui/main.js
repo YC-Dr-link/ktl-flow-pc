@@ -184,7 +184,8 @@ function refresh({ keepReceipt = false } = {}) {
 function onPick(slotId, fileIndex) {
   state.assignment = { ...state.assignment, [slotId]: fileIndex };
   const ok = refresh({ keepReceipt: true });
-  say(ok ? announce() : `오류 ${state.analysis.errors.length}건이 있습니다. 오류 내용을 확인하세요.`);
+  const cleared = syncFormDevice(); // 칸을 직접 골라 다른 기기 결과가 나온 경우도 비운다 (#24)
+  say(`${ok ? announce() : `오류 ${state.analysis.errors.length}건이 있습니다. 오류 내용을 확인하세요.`}${cleared ? ` ${cleared}` : ''}`);
 }
 
 // 결과가 나타났을 때 낭독할 문장 (SPEC FR-M4-11 AC-7). 경고나 알림이 있으면 건수를 덧붙인다
@@ -198,11 +199,8 @@ function announce() {
 // 새 파일 목록으로 바꾸고 처음부터 다시 분석한다. 일반사항 입력은 같은 기기(기기 번호 같음)면 남기고, 다른 기기면 비운다 (#24 사용자 결정).
 // 결과가 없어 기기를 모르면 남겨 두고, 다음에 결과가 나올 때 비교한다
 let formSerial = null; // 지금 일반사항 입력이 속한 기기 번호
-function load(files) {
-  state.files = files;
-  state.assignment = {};
-  resetSlotState();
-  const ok = refresh();
+// 결과가 새로 나올 때마다 부른다(load · onPick). 다른 기기면 일반사항 입력을 비우고, 비웠다는 문구를 돌려준다
+function syncFormDevice() {
   const serial = state.analysis?.result?.equipment.serial || null;
   let cleared = '';
   if (serial && formSerial && serial !== formSerial && optionalForm.hasValues()) {
@@ -210,12 +208,25 @@ function load(files) {
     cleared = `다른 기기(기기 번호 ${serial})라 일반사항 입력을 비웠습니다.`;
   }
   if (serial) formSerial = serial;
-  $('optionalNotice').hidden = !cleared;
-  $('optionalNotice').textContent = cleared;
+  if (cleared || !$('optionalNotice').hidden) {
+    $('optionalNotice').hidden = !cleared;
+    $('optionalNotice').textContent = cleared;
+  }
   syncOptionalBadge();
   syncSaveBtn();
   syncSaveBlock();
-  say(`${ok ? announce() : `오류 ${state.analysis.errors.length}건이 있습니다. 오류 내용을 확인하세요.`}${cleared ? ` ${cleared}` : ''}`);
+  return cleared;
+}
+// 반환: 낭독한 문장 (폴더 감시가 자기 안내를 덧붙일 때 이어 쓴다)
+function load(files) {
+  state.files = files;
+  state.assignment = {};
+  resetSlotState();
+  const ok = refresh();
+  const cleared = syncFormDevice();
+  const text = `${ok ? announce() : `오류 ${state.analysis.errors.length}건이 있습니다. 오류 내용을 확인하세요.`}${cleared ? ` ${cleared}` : ''}`;
+  say(text);
+  return text;
 }
 
 // 「작년 Excel에서 불러오기」 (#24): 같은 기기의 작년 파일이면 비어 있는 칸만 채운다
@@ -234,15 +245,23 @@ async function onPrevious(file) {
     return;
   }
   const now = state.analysis?.result?.equipment.serial;
-  if (now && prev.serial && prev.serial !== now) {
+  // 어느 기기 파일인지 모르면 채우지 않는다 (다른 기기 값이 성적서에 들어가지 않게)
+  if (!now) {
+    show('지금 결과의 기기 번호가 없어 작년 파일과 비교할 수 없습니다. CSV 6개로 결과를 낸 뒤 고르세요.', true);
+    return;
+  }
+  if (!prev.serial) {
+    show('작년 파일의 기기 번호(일반사항 D8)를 읽을 수 없어 채우지 않았습니다. 같은 기기의 파일인지 확인하세요.', true);
+    return;
+  }
+  if (prev.serial !== now) {
     show(`작년 파일의 기기 번호(${prev.serial})가 지금 기기(${now})와 다릅니다. 같은 기기의 파일을 고르세요.`, true);
     return;
   }
   const n = optionalForm.fill(prev.values);
-  formSerial = now || formSerial;
+  formSerial = now;
   $('optionalNotice').hidden = true;
-  show(n ? `작년 파일 ${file.name}에서 ${n}칸을 채웠습니다 (이미 넣은 칸은 그대로).` : `작년 파일 ${file.name}에서 채울 빈 칸이 없습니다.`);
-  say(status.textContent);
+  show(n ? `작년 파일 ${file.name}에서 ${n}칸을 채웠습니다 (이미 넣은 칸은 그대로).` : `작년 파일 ${file.name}에서 채울 빈 칸이 없습니다.`); // #prevStatus(role=status)가 읽는다
 }
 
 async function onFiles(fileList) {
@@ -411,10 +430,10 @@ const folderWatch = createFolderWatch({
   load: (files, note, { afterSave = false } = {}) => {
     const savedName = afterSave && $('saveMsg').dataset.state === 'saved' ? $('saveName').textContent : '';
     if (state.screen === 'save') goBack();
-    load(files);
+    const spoken = load(files);
     const serial = state.analysis?.result?.equipment.serial;
     if (savedName) setMsg('movedAfterSave', 'ok', `저장했습니다: ${savedName} · 다음 기기(기기 번호 ${serial || '?'}) 결과로 넘어왔습니다.`);
-    say(`${note} ${state.analysis?.result ? announce() : `오류 ${state.analysis.errors.length}건이 있습니다.`}`);
+    say(`${note} ${spoken}`); // load()가 낭독한 문장(일반사항을 비웠다는 안내 포함)에 폴더 감시 안내를 앞에 붙인다
     focusAfter(); // 누른 버튼이 숨으므로
   },
   isSaving: () => excelSaving,
