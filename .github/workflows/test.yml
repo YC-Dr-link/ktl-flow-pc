@@ -1,0 +1,31 @@
+# 계산 정답 테스트를 돌리고, 레포의 m4m5.html이 소스로 빌드한 결과와 같은지 확인한다 (#25)
+name: test
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: npm ci
+      - name: 계산 정답 · 경계값 테스트
+        run: npm test
+      - name: 소스로 다시 빌드한 HTML이 레포의 m4m5.html과 같은지
+        run: |
+          npm run build
+          cmp dist/m4m5.html m4m5.html || { echo "m4m5.html이 소스와 다릅니다. npm run build 후 dist/m4m5.html을 m4m5.html로 복사해 커밋하세요."; exit 1; }
+      - name: 합성 CSV · 배포 HTML 검사 (pytest)
+        run: |
+          python -m pip install pytest==9.2.0
+          python -m pytest -q tests/

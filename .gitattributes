@@ -1,0 +1,9 @@
+# 소스는 LF로 통일한다 (Windows autocrlf로 받아도 빌드 결과와 CSP 해시가 어긋나지 않게)
+src/** text eol=lf
+scripts/** text eol=lf
+tools/** text eol=lf
+tests/**/*.js text eol=lf
+package.json text eol=lf
+package-lock.json text eol=lf
+# 빌드 결과는 바이트 그대로 둔다 (CI가 소스로 다시 빌드한 것과 바이트 비교)
+m4m5.html -text
