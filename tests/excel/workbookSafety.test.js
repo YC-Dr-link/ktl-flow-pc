@@ -53,3 +53,37 @@ test('입력과 해제 용량 상한 및 XML 엔티티를 검사한다', async (
   const entity = await altered(zip => zip.file('xl/audit.xml', '<!DOCTYPE x [<!ENTITY y "SYNTH">]><x/>'));
   await assert.rejects(checkTemplate(entity), /XML 선언/);
 });
+
+test('다른 경로에 넣은 Excel 4 매크로도 관계·콘텐츠 형식으로 거부한다', async () => {
+  const bytes = await altered(async zip => {
+    const xml = await zip.file('xl/_rels/workbook.xml.rels').async('string');
+    zip.file('xl/_rels/workbook.xml.rels', xml.replace('</Relationships>', '<Relationship Id="macro" Type="http://schemas.microsoft.com/office/2006/relationships/xlMacrosheet" Target="odd.xml"/></Relationships>'));
+    zip.file('xl/odd.xml', '<worksheet/>');
+  });
+  await assert.rejects(checkTemplate(bytes), /활성 콘텐츠/);
+  const types = await altered(async zip => {
+    zip.file('[Content_Types].xml', (await zip.file('[Content_Types].xml').async('string')).replace('</Types>', '<Override PartName="/xl/odd.xml" ContentType="application/vnd.ms-excel.macrosheet+xml"/></Types>'));
+  });
+  await assert.rejects(checkTemplate(types), /활성 콘텐츠/);
+});
+for (const definition of ['<definedName name="SYNTH">WEBSERVICE("https://example.invalid/")</definedName>', '<definedName name="_xlnm.Auto_Open">Sheet1!$A$1</definedName>', '<definedName name="SYNTH">CALL("SYNTH")</definedName>']) {
+  test(`자동 실행·외부 통신을 이름 정의에서도 거부: ${definition.slice(0, 65)}`, async () => {
+    const bytes = await altered(async zip => zip.file('xl/workbook.xml', (await zip.file('xl/workbook.xml').async('string')).replace('</workbook>', `<definedNames>${definition}</definedNames></workbook>`)));
+    await assert.rejects(checkTemplate(bytes), /자동 실행|외부 연결 수식/);
+  });
+}
+test('ZIP 크기 표기를 속인 XML도 실제 해제 중 상한으로 멈춘다', async () => {
+  const zip = await JSZip.loadAsync(original);
+  zip.file('xl/large.xml', '<x>' + 'A'.repeat(WORKBOOK_LIMITS.xml + 1) + '</x>');
+  const bytes = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
+  // 가짜 시험용 ZIP 중앙 디렉터리의 uncompressed size만 작게 바꾼다.
+  const signature = Buffer.from([0x50, 0x4b, 0x01, 0x02]);
+  let offset = bytes.indexOf(signature);
+  while (offset >= 0) {
+    const nameLength = bytes.readUInt16LE(offset + 28);
+    if (bytes.subarray(offset + 46, offset + 46 + nameLength).toString() === 'xl/large.xml') { bytes.writeUInt32LE(1, offset + 24); break; }
+    offset = bytes.indexOf(signature, offset + 46 + nameLength);
+  }
+  assert.ok(offset >= 0);
+  await assert.rejects(loadWorkbook(bytes), /너무 큽니다/);
+});
