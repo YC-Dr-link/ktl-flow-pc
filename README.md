@@ -11,20 +11,17 @@
 | 출력 · 계산식 | [02 §5](https://github.com/YC-Dr-link/ktl-hub/blob/main/docs/02-API명세.md#5-a-2-출력-형식-통일-excel) |
 | 화면 | [PC-01~04](https://github.com/YC-Dr-link/ktl-hub/blob/main/docs/03-UI시나리오.md#a-7-pc-01--pc-04-실험-pc-도구) |
 
-## 첫 번째 할 일 — 10/24(토)까지
+## 구조
 
-**형태 결정**: 파이썬(추천) 또는 단일 HTML. 이슈 #1에 결정과 이유를 남긴다.
+형태는 단일 HTML이다 (이슈 #1). `m4m5.html`은 손으로 고치지 않고 소스를 빌드해서 만든다.
 
-추천 구성 (파이썬):
 ```
-flowpc/
-  qr.py         QR 파싱 · 체크값 · 한글 자모 → 영문 복원
-  csvread.py    cp949 읽기 · 1~11행 기기 정보 · 12행 칼럼 · 종류 판별
-  calc.py       반복성 · 직선성(2가지) · 민감도
-  excel.py      openpyxl로 통일 Excel + 그래프
-  app.py        tkinter 화면 (PC-01~04)
-synthetic/      가짜 풍동 CSV 6개 세트 (생성 스크립트 포함)
-tests/
+src/core/      CSV 읽기 · 종류 판별 · 검증 · 계산(반복성 · 직선성 · 민감도) · 판정
+src/excel/     고른 양식(.xlsx)에 값을 채우는 Excel 만들기
+src/ui/        화면 (index.html · style.css · main.js · 폴더 감시 folderWatch.js)
+scripts/       build.mjs(→ dist/m4m5.html, CSP 해시 계산) · check-dist.mjs(외부 URL 0건 검사)
+synthetic/     합성 풍동 CSV 2세트와 정답(set_a · set_b, generate.py) · 합성 양식
+tests/         계산 정답 · 경계값 · 판별 · Excel 테스트 (node --test), 합성 CSV · 배포 HTML 검사 (pytest)
 ```
 
 ## 실행
@@ -32,3 +29,8 @@ tests/
 1. `m4m5.html`을 Chrome 또는 Edge로 연다 (설치 · 인터넷 필요 없음).
 2. CSV 6개를 직접 넣거나 장비 출력 폴더를 선택하고, 새 검사분이 준비되면 「반영」을 누른다.
 3. 저장 화면에서 양식(.xlsx)을 고르고 「Excel 저장」을 눌러 저장 폴더와 파일명을 지정한다 (합성 양식: `synthetic/template_synthetic.xlsx`).
+
+## 개발
+
+- 테스트: Node.js 22 이상에서 `npm ci` 후 `npm test` (합성 CSV 정답과 소수 셋째 자리까지 비교).
+- 빌드: `npm run build` 후 `dist/m4m5.html`을 `m4m5.html`로 복사해 커밋한다. CI가 소스로 다시 빌드해 바이트를 비교한다.
