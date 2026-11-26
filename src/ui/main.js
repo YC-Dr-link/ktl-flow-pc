@@ -1,6 +1,6 @@
 // 한 화면 작업대(왼쪽 넣은 파일, 오른쪽 결과)를 묶는 화면 진입점. 판별·검증·계산은 core의 analyze, Excel은 excel의 buildXlsx를 부르기만 한다
 import { analyze } from '../core/analyze.js';
-import { buildXlsx, checkTemplate } from '../excel/buildXlsx.js';
+import { buildXlsx, checkTemplate, outputFileName } from '../excel/buildXlsx.js';
 import { h, clear } from './dom.js';
 import { renderSlots, resetSlotState } from './slots.js';
 import { renderResult, renderGraphEnv, renderUsedRows } from './results.js';
@@ -10,6 +10,7 @@ import { renderMapPreview } from './mapPreview.js';
 import { noticeList } from './noticeList.js';
 import { safeDownloadName } from './fileName.js';
 import { createFolderWatch } from './folderWatch.js';
+import { createReceiptForm } from './receiptForm.js';
 
 const $ = (id) => document.getElementById(id);
 const fromBase64 = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
@@ -25,11 +26,20 @@ const state = {
 
 let excelSaving = false; // 저장 위치를 고르고 파일을 쓰는 동안 true. 그동안 저장 버튼과 폴더 「반영」을 막는다
 
-const optionalForm = createOptionalForm($('optionalForm'), () => {
+function onInputChange() {
   syncSaveBtn();
   syncSaveBlock();
   syncOptionalBadge();
-});
+}
+const optionalForm = createOptionalForm($('optionalForm'), onInputChange);
+const receiptForm = createReceiptForm($('receiptBox'), onInputChange); // 접수번호 · 회사명 확인 (#23)
+const inputsValid = () => receiptForm.valid() && optionalForm.valid();
+
+// 저장 화면에서 사람이 확인한 접수번호 · 회사명을 넣은 결과. Excel(D2 · D3 · 시트별 B1)과 파일 이름은 이 값을 쓴다
+const confirmedResult = () => {
+  const { result } = state.analysis;
+  return { ...result, equipment: { ...result.equipment, ...receiptForm.values() } };
+};
 
 // 저장 화면의 선택 입력 제목 옆에 틀린 칸 수를 빨간 배지로 보인다 (AC-11)
 function syncOptionalBadge() {
@@ -48,15 +58,20 @@ function setMsg(state, cls, ...children) {
 
 // 저장 버튼이 입력 오류로 막힌 이유를 위 줄 바로 아래 띠에 알린다. 고치면 이 안내만 지운다 (접근성 A5)
 const SAVE_BLOCKED = '입력 값에 고칠 곳이 있어 저장할 수 없습니다. 표시된 칸을 고치면 저장할 수 있습니다.';
+const RECEIPT_BLOCKED = '접수번호 · 회사명을 확인해야 저장할 수 있습니다.';
 function goToInvalid(e) {
   e.preventDefault();
-  document.querySelector('#optionalForm [aria-invalid="true"]')?.focus(); // 첫 오류 칸으로
+  (receiptForm.firstInvalid() || document.querySelector('#optionalForm [aria-invalid="true"]'))?.focus(); // 첫 오류 칸으로
 }
 function syncSaveBlock() {
   const msg = $('saveMsg');
-  if (state.screen === 'save' && !optionalForm.valid()) {
-    if (msg.dataset.state !== 'blocked') setMsg('blocked', 'err', `${SAVE_BLOCKED} `, h('a', { href: '#optionalForm', onClick: goToInvalid }, '고칠 칸으로')); // 같은 글을 다시 쓰면 role=status가 글자마다 다시 읽는다
-  } else if (msg.dataset.state === 'blocked') {
+  const blocked = msg.dataset.state === 'blocked' || msg.dataset.state === 'blockedReceipt';
+  const link = () => h('a', { href: '#saveScreen', onClick: goToInvalid }, '고칠 칸으로');
+  if (state.screen === 'save' && !receiptForm.valid()) {
+    if (msg.dataset.state !== 'blockedReceipt') setMsg('blockedReceipt', 'err', `${RECEIPT_BLOCKED} `, link());
+  } else if (state.screen === 'save' && !optionalForm.valid()) {
+    if (msg.dataset.state !== 'blocked') setMsg('blocked', 'err', `${SAVE_BLOCKED} `, link()); // 같은 글을 다시 쓰면 role=status가 글자마다 다시 읽는다
+  } else if (blocked) {
     setMsg('', '');
   }
 }
@@ -108,7 +123,7 @@ async function onTemplate(file) {
 function syncSaveBtn() {
   const { screen } = state;
   $('saveBtn').textContent = screen === 'save' ? 'Excel 저장' : 'Excel 만들고 저장';
-  $('saveBtn').disabled = excelSaving || (screen === 'save' ? !optionalForm.valid() : !state.analysis?.result); // 저장 화면에서는 입력 오류가 있을 때만 꺼진다
+  $('saveBtn').disabled = excelSaving || (screen === 'save' ? !inputsValid() : !state.analysis?.result); // 저장 화면에서는 입력 오류가 있을 때만 꺼진다
 }
 // 상태 낭독. 같은 문구를 연달아 써도 다시 읽히도록 먼저 비우고 잠시 뒤에 쓴다 (스크린리더는 내용이 바뀌어야 읽는다)
 let sayTimer = 0;
@@ -154,6 +169,7 @@ function refresh() {
     renderResult($('resultBody'), a);
     $('saveName').textContent = '';
   }
+  receiptForm.load(ok ? a.result.equipment : null); // 새 결과마다 CSV 1행 값으로 다시 채우고 확인 체크를 푼다
   syncSaveBtn();
   setMsg('', '');
   syncSaveBlock();
@@ -203,7 +219,11 @@ function goSave() {
   syncOptionalBadge();
   window.scrollTo(0, 0);
   $('saveTitle').focus();
-  say('Excel 저장 화면입니다. 일반사항 값은 모두 선택이며 비워도 저장할 수 있습니다.');
+  say(
+    receiptForm.problem()
+      ? 'Excel 저장 화면입니다. CSV 1행의 접수번호를 확실히 나눌 수 없어 확인이 필요합니다.'
+      : 'Excel 저장 화면입니다. 일반사항 값은 모두 선택이며 비워도 저장할 수 있습니다.',
+  );
 }
 
 // 저장 화면 → 결과 화면. 입력값은 남고, 초점은 「Excel 만들고 저장」 버튼으로 간다
@@ -219,7 +239,7 @@ function goBack() {
 
 // 저장 위치와 파일 이름을 고르게 한 뒤 Excel을 만들어 쓴다 (PR #22). 고르는 창이 없는 브라우저는 안내만 한다
 async function save() {
-  if (excelSaving || !state.analysis?.result || !optionalForm.valid()) {
+  if (excelSaving || !state.analysis?.result || !inputsValid()) {
     syncSaveBlock();
     return;
   }
@@ -232,7 +252,8 @@ async function save() {
     setMsg('failed', 'err', '저장 위치를 선택하려면 Edge 또는 Chrome에서 열어 주세요.');
     return;
   }
-  const { result, summaries } = state.analysis;
+  const { summaries } = state.analysis;
+  const result = confirmedResult();
   const template = state.template.bytes;
   const values = optionalForm.values();
   excelSaving = true;
@@ -240,7 +261,7 @@ async function save() {
   let writer;
   try {
     const target = await window.showSaveFilePicker({
-      suggestedName: safeDownloadName(`${result.equipment.receipt_no}_유속계.xlsx`), // 길이 상한·방향 제어 문자 제거 (보안 L2)
+      suggestedName: safeDownloadName(outputFileName(result)), // 접수번호_유속계.xlsx. 길이 상한·방향 제어 문자 제거 (보안 L2)
       types: [{ description: 'Excel 통합 문서', accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] } }],
       excludeAcceptAllOption: true,
     });
@@ -307,7 +328,7 @@ const modals = {
     render: (body) => {
       const table = h('div');
       body.append(table);
-      renderMapPreview(table, state.analysis, optionalForm.values());
+      renderMapPreview(table, { ...state.analysis, result: confirmedResult() }, optionalForm.values());
     },
   }),
 };
