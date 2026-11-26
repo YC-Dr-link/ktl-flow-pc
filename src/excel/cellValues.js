@@ -138,7 +138,8 @@ function generalSheet(result, summaries, optional, config) {
   const unit = text(optional.unitNumber);
   if (unit) cells.G6 = config.unitNumberLabel.replace('{값}', () => unit);
   const coef = text(optional.pitotCoefficient);
-  cells.H11 = coef ? (Number.isFinite(num(coef)) ? num(coef) : coef) : blank; // 양식 자리표시 123을 반드시 덮어씀
+  const coefNum = num(coef.replace(',', '.')); // 0,826처럼 쉼표 소수점도 숫자로 (#24)
+  cells.H11 = coef ? (Number.isFinite(coefNum) ? coefNum : coef) : blank; // 양식 자리표시 123을 반드시 덮어씀
 
   return cells;
 }
