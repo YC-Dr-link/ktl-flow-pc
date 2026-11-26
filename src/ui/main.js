@@ -25,6 +25,7 @@ const state = {
 };
 
 let excelSaving = false; // 저장 위치를 고르고 파일을 쓰는 동안 true. 그동안 저장 버튼과 폴더 「반영」을 막는다
+let watchBlock = null; // 폴더 감시가 저장을 막는 이유 (재측정 CSV 교체를 묻는 동안, #23). 없으면 null
 
 function onInputChange() {
   syncSaveBtn();
@@ -65,9 +66,11 @@ function goToInvalid(e) {
 }
 function syncSaveBlock() {
   const msg = $('saveMsg');
-  const blocked = msg.dataset.state === 'blocked' || msg.dataset.state === 'blockedReceipt';
+  const blocked = ['blocked', 'blockedReceipt', 'blockedWatch'].includes(msg.dataset.state);
   const link = () => h('a', { href: '#saveScreen', onClick: goToInvalid }, '고칠 칸으로');
-  if (state.screen === 'save' && !receiptForm.valid()) {
+  if (watchBlock && state.analysis?.result) {
+    if (msg.dataset.state !== 'blockedWatch' || msg.textContent !== watchBlock) setMsg('blockedWatch', 'err', watchBlock);
+  } else if (state.screen === 'save' && !receiptForm.valid()) {
     if (msg.dataset.state !== 'blockedReceipt') setMsg('blockedReceipt', 'err', `${RECEIPT_BLOCKED} `, link());
   } else if (state.screen === 'save' && !optionalForm.valid()) {
     if (msg.dataset.state !== 'blocked') setMsg('blocked', 'err', `${SAVE_BLOCKED} `, link()); // 같은 글을 다시 쓰면 role=status가 글자마다 다시 읽는다
@@ -123,7 +126,7 @@ async function onTemplate(file) {
 function syncSaveBtn() {
   const { screen } = state;
   $('saveBtn').textContent = screen === 'save' ? 'Excel 저장' : 'Excel 만들고 저장';
-  $('saveBtn').disabled = excelSaving || (screen === 'save' ? !inputsValid() : !state.analysis?.result); // 저장 화면에서는 입력 오류가 있을 때만 꺼진다
+  $('saveBtn').disabled = excelSaving || Boolean(watchBlock) || (screen === 'save' ? !inputsValid() : !state.analysis?.result); // 저장 화면에서는 입력 오류가 있을 때만 꺼진다
 }
 // 상태 낭독. 같은 문구를 연달아 써도 다시 읽히도록 먼저 비우고 잠시 뒤에 쓴다 (스크린리더는 내용이 바뀌어야 읽는다)
 let sayTimer = 0;
@@ -240,7 +243,7 @@ function goBack() {
 
 // 저장 위치와 파일 이름을 고르게 한 뒤 Excel을 만들어 쓴다 (PR #22). 고르는 창이 없는 브라우저는 안내만 한다
 async function save() {
-  if (excelSaving || !state.analysis?.result || !inputsValid()) {
+  if (excelSaving || watchBlock || !state.analysis?.result || !inputsValid()) {
     syncSaveBlock();
     return;
   }
@@ -277,6 +280,7 @@ async function save() {
     setMsg('saved', 'ok', `저장했습니다: ${target.name}`);
     $('saveName').textContent = target.name;
     say('Excel을 저장했습니다.');
+    folderWatch.notifySaved(); // 다음 기기가 기다리고 있으면 넘어간다 (#23 B안)
   } catch (error) {
     if (writer) await writer.abort().catch(() => {});
     if (error.name === 'AbortError') setMsg('cancelled', '', 'Excel 저장을 취소했습니다.');
@@ -354,7 +358,24 @@ function placeRail() {
 narrow.addEventListener('change', placeRail);
 placeRail();
 
-createFolderWatch({ analyze, load, isSaving: () => excelSaving });
+// 폴더 감시 (#23). 다른 기기는 지금 결과를 저장할 때까지 기다리고, 넘어갈 때는 저장 화면에서 결과 화면으로 돌아간다
+const folderWatch = createFolderWatch({
+  analyze,
+  load: (files) => {
+    if (state.screen === 'save') goBack();
+    load(files);
+  },
+  isSaving: () => excelSaving,
+  getFiles: () => state.files,
+  hasResult: () => Boolean(state.analysis?.result),
+  currentDevice: () => state.analysis?.result?.equipment.serial || '?',
+  onBlock: (reason) => {
+    if (reason === watchBlock) return;
+    watchBlock = reason;
+    syncSaveBtn();
+    syncSaveBlock();
+  },
+});
 
 refresh();
 restoreTemplate();
