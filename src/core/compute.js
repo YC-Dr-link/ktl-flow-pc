@@ -1,5 +1,5 @@
 // 검증을 통과한 요약 파일 3개에서 반복성·직선성·민감도·환경 조건·장비 정보를 계산한다 (CALCULATION 4절)
-import { headerValue, parseNumber } from './csv.js';
+import { headerValue, parseDate, parseNumber } from './csv.js';
 import { formatRounded } from './round.js';
 import { judge, overallJudgement } from './judge.js';
 
@@ -28,12 +28,17 @@ function withDisplay(obj, config) {
   };
 }
 
+// 교정일을 「YYYY년 MM월 DD일」로 (읽는 규칙은 csv.js parseDate). 검증을 통과한 날짜만 들어온다
+export function formatTestDate(text) {
+  const [y, m, d] = parseDate(text);
+  return `${y}년 ${m.padStart(2, '0')}월 ${d.padStart(2, '0')}일`;
+}
+
 function equipment(file, config) {
   const b1 = headerValue(file, 1);
   const space = b1.search(/\s/);
   const receiptNo = config.receiptNoMode === 'left15' ? b1.slice(0, 15) : space < 0 ? b1 : b1.slice(0, space);
   const company = space < 0 ? '' : b1.slice(space).trim();
-  const [y, m, d] = headerValue(file, 10).match(/\d+/g);
   return {
     receipt_no: receiptNo,
     company,
@@ -42,7 +47,7 @@ function equipment(file, config) {
     model: headerValue(file, 4),
     serial: headerValue(file, 5),
     max_velocity: parseNumber(headerValue(file, 6)),
-    test_date: `${y}년 ${m.padStart(2, '0')}월 ${d.padStart(2, '0')}일`,
+    test_date: formatTestDate(headerValue(file, 10)),
     velocity_unit: config.velocityUnitLabel,
   };
 }

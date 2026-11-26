@@ -1,5 +1,5 @@
 // 칸에 배정된 파일을 검증해 오류와 경고를 코드·파일·행·한국어 메시지로 만든다 (CALCULATION 3절: 오류 8종, 경고 3종. CONFIG_INVALID·COMPUTE_FAILED는 analyze.js에서, 나머지는 여기서 만든다)
-import { COLUMN_NAME_ROW, collapseSpaces, headerValue, parseNumber } from './csv.js';
+import { COLUMN_NAME_ROW, collapseSpaces, headerValue, parseDate, parseNumber } from './csv.js';
 import { FORMATS, FORMAT_NAMES, TEST_NAMES } from './classify.js';
 import { SLOTS, slotLabel } from './assign.js';
 
@@ -55,7 +55,7 @@ function checkValues(item, slot) {
   return errors;
 }
 
-// 머리글 값 자체가 계산에 쓸 수 있는지: 의뢰기관(1행) 있음, 최대유속(6행) 양수, 교정일(10행)에 숫자 3개
+// 머리글 값 자체가 계산에 쓸 수 있는지: 의뢰기관(1행) 있음, 최대유속(6행) 양수, 교정일(10행)이 연도 4자리 · 월 1~12 · 일 1~31
 function checkHeaderValues(item, slot) {
   const errors = [];
   const bad = (row, what) =>
@@ -63,7 +63,7 @@ function checkHeaderValues(item, slot) {
   if (!headerValue(item.file, 1)) bad(1, '비어 있습니다');
   const max = parseNumber(headerValue(item.file, 6));
   if (!(max > 0)) bad(6, '양수 숫자가 아닙니다');
-  if ((headerValue(item.file, 10).match(/\d+/g) || []).length < 3) bad(10, '날짜(연·월·일 숫자 3개)가 아닙니다');
+  if (!parseDate(headerValue(item.file, 10))) bad(10, '날짜(연도 4자리 · 월 1~12 · 일 1~31)가 아닙니다');
   return errors;
 }
 

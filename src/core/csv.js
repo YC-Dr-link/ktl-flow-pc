@@ -64,3 +64,14 @@ export function collapseSpaces(s) {
 export function parseNumber(s) {
   return /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(String(s).trim()) ? Number(s) : NaN;
 }
+
+// 교정일 글자의 숫자 3개를 [연, 월, 일] 글자로. 4자리 수를 연도로 보고, 연도가 마지막이면 월-일-연도로 읽는다.
+// 연도가 4자리가 아니거나 월 1~12 · 일 1~31을 벗어나면 null (검증에서 VALUE_INVALID로 막는다)
+// TODO(확인 필요): 실제 장비 CSV가 MM-DD-YYYY를 내는지. 실제 견본 꼴은 「YYYY 년 MM 월 DD 일」, 합성 set_a는 11-02-2026
+export function parseDate(text) {
+  const nums = String(text).match(/\d+/g) || [];
+  if (nums.length < 3) return null;
+  const [y, m, d] = nums[2].length === 4 && nums[0].length !== 4 ? [nums[2], nums[0], nums[1]] : nums;
+  const ok = y.length === 4 && Number(m) >= 1 && Number(m) <= 12 && Number(d) >= 1 && Number(d) <= 31;
+  return ok ? [y, m, d] : null;
+}
