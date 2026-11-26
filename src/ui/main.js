@@ -142,7 +142,8 @@ function renderMessages(a) {
   );
 }
 
-function refresh() {
+// keepReceipt: 칸만 다시 고른 경우(onPick). CSV 1행이 같으면 사람이 고친 접수번호 · 회사명과 확인 체크를 남긴다
+function refresh({ keepReceipt = false } = {}) {
   const t0 = performance.now();
   const a = analyze(state.files, { assignment: state.assignment });
   state.analysis = a;
@@ -169,7 +170,7 @@ function refresh() {
     renderResult($('resultBody'), a);
     $('saveName').textContent = '';
   }
-  receiptForm.load(ok ? a.result.equipment : null); // 새 결과마다 CSV 1행 값으로 다시 채우고 확인 체크를 푼다
+  receiptForm.load(ok ? a.result.equipment : null, { keep: keepReceipt }); // 새 CSV면 1행 값으로 다시 채우고 확인 체크를 푼다
   syncSaveBtn();
   setMsg('', '');
   syncSaveBlock();
@@ -178,7 +179,7 @@ function refresh() {
 
 function onPick(slotId, fileIndex) {
   state.assignment = { ...state.assignment, [slotId]: fileIndex };
-  const ok = refresh();
+  const ok = refresh({ keepReceipt: true });
   say(ok ? announce() : `오류 ${state.analysis.errors.length}건이 있습니다. 오류 내용을 확인하세요.`);
 }
 

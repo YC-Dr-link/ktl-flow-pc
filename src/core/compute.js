@@ -1,7 +1,7 @@
 // 검증을 통과한 요약 파일 3개에서 반복성·직선성·민감도·환경 조건·장비 정보를 계산한다 (CALCULATION 4절)
 import { headerValue, parseDate, parseNumber } from './csv.js';
 import { formatRounded } from './round.js';
-import { splitRequester } from './receipt.js';
+import { isReceiptNo, splitRequester } from './receipt.js';
 import { judge, overallJudgement } from './judge.js';
 
 const sum = (a) => a.reduce((x, y) => x + y, 0);
@@ -38,10 +38,14 @@ export function formatTestDate(text) {
 function equipment(file, config) {
   const b1 = headerValue(file, 1);
   const split = splitRequester(b1);
+  const receiptNo = config.receiptNoMode === 'left15' ? b1.slice(0, 15) : split.receipt_no;
+  // left15는 원본 수식처럼 앞 15글자를 그대로 쓰므로, 그 값이 접수번호 꼴이 아니면 꼴 문제로 본다
+  // TODO(확인 필요): left15 설정을 계속 둘지. 저장 화면 칸은 앞뒤 공백을 지우므로 원본 수식의 뒤 공백은 D3에 들어가지 않는다
+  const problem = split.problem || (isReceiptNo(receiptNo) ? null : 'format');
   return {
-    receipt_no: config.receiptNoMode === 'left15' ? b1.slice(0, 15) : split.receipt_no,
+    receipt_no: receiptNo,
     company: split.company,
-    receipt_problem: split.problem, // null | 'glued' | 'format' (#23). 있으면 저장 화면에서 사람이 확인해야 저장된다
+    receipt_problem: problem, // null | 'glued' | 'format' (#23). 있으면 저장 화면에서 사람이 확인해야 저장된다
     requester_raw: b1, // CSV 1행 원문 (저장 화면에 보여 준다)
     address: headerValue(file, 2),
     instrument_kind: headerValue(file, 3),

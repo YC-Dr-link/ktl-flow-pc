@@ -3,8 +3,8 @@ import { h } from './dom.js';
 
 // 코드별 "다음에 할 일" (#23). 메시지가 이미 할 일을 말하는 코드(PAIR_TIME · DATA_AFTER_BLANK)와 내부 코드(CONFIG_INVALID · COMPUTE_FAILED)는 덧붙이지 않는다
 export const NEXT_STEP = {
-  FILE_MISSING: '빠진 CSV를 더 넣으세요.',
-  MISSING_KIND: '빠진 CSV를 더 넣으세요.',
+  FILE_MISSING: '빠진 CSV를 더 넣거나, 「넣은 파일」 칸에서 직접 고르세요.', // 같은 종류가 둘이라 칸이 빈 경우(DUPLICATE_KIND)도 있다
+  MISSING_KIND: '빠진 CSV를 더 넣거나, 판별되지 않은 파일이 있으면 「넣은 파일」 칸에서 직접 고르세요.',
   DUPLICATE_KIND: '같은 종류 파일 중 하나를 빼고 다시 넣거나, 「넣은 파일」 칸에서 직접 고르세요.',
   UNCLASSIFIED: '풍동 프로그램이 저장한 CSV가 맞는지 확인하세요.',
   HEADER_MISMATCH: '같은 기기 · 같은 날 시험한 CSV 6개인지 확인하세요.',

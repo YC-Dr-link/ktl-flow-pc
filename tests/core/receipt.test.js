@@ -24,6 +24,18 @@ test('접수번호 꼴이 아니면 첫 공백 앞을 접수번호로 두고 for
   assert.deepEqual(splitRequester('25123456011 SYNTH-CO'), { receipt_no: '25123456011', company: 'SYNTH-CO', problem: 'format' });
   assert.deepEqual(splitRequester('2-123456-01-1 SYNTH-CO'), { receipt_no: '2-123456-01-1', company: 'SYNTH-CO', problem: 'format' });
   assert.deepEqual(splitRequester(''), { receipt_no: '', company: '', problem: 'format' });
+  assert.deepEqual(splitRequester(null), { receipt_no: '', company: '', problem: 'format' });
+});
+
+test('세부 번호가 3자리 이상이거나 하이픈이 더 붙으면 세부를 버리지 않고 format으로 알린다', () => {
+  assert.deepEqual(splitRequester('25-123456-01-123 SYNTH-CO'), { receipt_no: '25-123456-01-123', company: 'SYNTH-CO', problem: 'format' });
+  assert.deepEqual(splitRequester('25-123456-01-1-2 SYNTH-CO'), { receipt_no: '25-123456-01-1-2', company: 'SYNTH-CO', problem: 'format' });
+  assert.equal(splitRequester('25-123456-01-1234SYNTH').problem, 'format');
+});
+
+test('탭 · 전각 공백도 구분 공백으로 본다', () => {
+  assert.deepEqual(splitRequester('25-123456-01-1	SYNTH-CO'), { receipt_no: '25-123456-01-1', company: 'SYNTH-CO', problem: null });
+  assert.deepEqual(splitRequester('25-123456-01-1　SYNTH-CO'), { receipt_no: '25-123456-01-1', company: 'SYNTH-CO', problem: null });
 });
 
 test('isReceiptNo: 사람이 고친 값이 NN-NNNNNN-NN(-N|-NN) 꼴인지', () => {
@@ -40,4 +52,15 @@ test('analyze 결과에 receipt_problem과 1행 원문이 들어간다', async (
   const glued = Object.fromEntries(Object.entries(sample).map(([id, f]) => [id, replaceInLine(f, 1, '25-123456-01-1 SYNTH-CO', '25-123456-01-1SYNTH-CO')]));
   const eq = analyze(toList(glued)).result.equipment;
   assert.deepEqual([eq.receipt_no, eq.company, eq.receipt_problem, eq.requester_raw], ['25-123456-01-1', 'SYNTH-CO', 'glued', '25-123456-01-1SYNTH-CO']);
+});
+
+test('receiptNoMode left15: 앞 15글자가 접수번호 꼴이 아니면 format으로 알린다', async () => {
+  const { analyze } = await import('../../src/core/analyze.js');
+  const { default: defaultConfig } = await import('../../src/config.js');
+  const { loadSample, replaceInLine, toList } = await import('../helpers/fixture.js');
+  const config = { ...defaultConfig, receiptNoMode: 'left15' };
+  const sample = loadSample('set_a');
+  const noDetail = Object.fromEntries(Object.entries(sample).map(([id, f]) => [id, replaceInLine(f, 1, '25-123456-01-1 ', '25-123456-01 ')]));
+  const eq = analyze(toList(noDetail), { config }).result.equipment;
+  assert.deepEqual([eq.receipt_no, eq.receipt_problem], ['25-123456-01 SY', 'format']);
 });
