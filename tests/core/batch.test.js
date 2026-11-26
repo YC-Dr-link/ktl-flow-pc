@@ -68,3 +68,35 @@ test('판별 못 하는 파일은 ignored로 빼고, 같은 칸 파일이 둘이
   assert.deepEqual(plan.ignored, ['memo.csv']);
   assert.deepEqual(plan.replace.slots.map((s) => s.name), ['lin-new.csv']);
 });
+
+test('같은 칸에서 진 파일은 superseded로 돌려준다 (반영할 때 기준에 함께 넣어 다시 묻지 않게)', () => {
+  const older = { ...stamp(retimed(sample.lin_summary), 'lin-old.csv'), lastModified: 1 };
+  const newer = stamp(retimed(sample.lin_summary), 'lin-new.csv');
+  const plan = planFolder({ current, incoming: [older, newer] });
+  assert.deepEqual(plan.replace.superseded, ['lin-old.csv']);
+  const next = planFolder({ current: [], incoming: [...current.map((f) => stamp(f)), { ...stamp(sample.rep_summary, 'rep-old.csv'), lastModified: 1 }] });
+  assert.deepEqual(next.next[0].superseded, ['rep-old.csv']);
+});
+
+test('다음 기기 순서는 먼저 들어온(가장 이른 lastModified) 기기가 앞이다 (폴더 나열 순서와 상관없이)', () => {
+  const third = (f) => replaceInLine(f, 5, SERIAL, 'SYNTH-0003');
+  const late = current.map((f) => ({ ...stamp(otherDevice(f), `a-${f.name}`), lastModified: 9000 })); // 이름순으로는 앞
+  const early = current.slice(0, 3).map((f, i) => ({ ...stamp(third(f), `z-${f.name}`), lastModified: 100 + i }));
+  const plan = planFolder({ current, incoming: [...late, ...early] });
+  assert.deepEqual(plan.next.map((n) => [n.serial, n.ready]), [['SYNTH-0003', false], ['SYNTH-0002', true]]);
+});
+
+test('기기 번호가 비면 같은 접수번호여도 지금 기기로 보지 않는다 (교체가 아니라 다음 기기, 기기 번호 모름)', () => {
+  const blank = (f) => replaceInLine(f, 5, SERIAL, '');
+  const plan = planFolder({ current, incoming: current.slice(0, 2).map((f) => stamp(blank(retimed(f)), `n-${f.name}`)) });
+  assert.equal(plan.replace, null);
+  assert.deepEqual([plan.next.length, plan.next[0].serial, plan.next[0].unknown], [1, '', true]);
+});
+
+test('지금 화면과 바이트가 같은 파일은 교체로 묻지 않고 unchanged로 돌려준다 (손으로 같은 6개를 넣은 경우 등)', () => {
+  const plan = planFolder({ current, incoming: current.map((f) => stamp(f, `copy-${f.name}`)) });
+  assert.equal(plan.replace, null);
+  assert.equal(plan.unchanged.length, 6);
+  const mixed = planFolder({ current, incoming: [stamp(sample.rep_summary, 'same.csv'), stamp(retimed(sample.rep_source), 'new.csv')] });
+  assert.deepEqual([mixed.unchanged, mixed.replace.slots.map((s) => s.name)], [['same.csv'], ['new.csv']]);
+});

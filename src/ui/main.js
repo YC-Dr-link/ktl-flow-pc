@@ -237,6 +237,7 @@ function goBack() {
   $('app').hidden = false;
   setMsg('', '');
   syncSaveBtn();
+  syncSaveBlock(); // 폴더 감시가 저장을 막고 있으면 그 이유는 결과 화면에서도 남긴다
   $('saveBtn').focus();
   say('결과 화면으로 돌아왔습니다.');
 }
@@ -258,6 +259,7 @@ async function save() {
   }
   const { summaries } = state.analysis;
   const result = confirmedResult();
+  const savingFiles = state.files; // 저장하는 사이 화면이 바뀌어도 「이 파일을 저장함」을 정확히 알리려고 잡아 둔다
   const template = state.template.bytes;
   const values = optionalForm.values();
   excelSaving = true;
@@ -280,7 +282,7 @@ async function save() {
     setMsg('saved', 'ok', `저장했습니다: ${target.name}`);
     $('saveName').textContent = target.name;
     say('Excel을 저장했습니다.');
-    folderWatch.notifySaved(); // 다음 기기가 기다리고 있으면 넘어간다 (#23 B안)
+    folderWatch.notifySaved(savingFiles); // 다음 기기가 기다리고 있으면 넘어간다 (#23 B안)
   } catch (error) {
     if (writer) await writer.abort().catch(() => {});
     if (error.name === 'AbortError') setMsg('cancelled', '', 'Excel 저장을 취소했습니다.');
@@ -361,14 +363,20 @@ placeRail();
 // 폴더 감시 (#23). 다른 기기는 지금 결과를 저장할 때까지 기다리고, 넘어갈 때는 저장 화면에서 결과 화면으로 돌아간다
 const folderWatch = createFolderWatch({
   analyze,
-  load: (files) => {
+  load: (files, note) => {
+    const saved = $('saveMsg').dataset.state === 'saved' ? $('saveMsg').textContent : ''; // 방금 저장한 안내는 남긴다
     if (state.screen === 'save') goBack();
     load(files);
+    const serial = state.analysis?.result?.equipment.serial;
+    if (saved) setMsg('saved', 'ok', `${saved} · 다음 기기(기기 번호 ${serial || '?'}) 결과로 넘어왔습니다.`);
+    say(`${note} ${state.analysis?.result ? announce() : `오류 ${state.analysis.errors.length}건이 있습니다.`}`);
+    $('saveBtn').focus(); // 누른 버튼이 숨으므로 초점을 저장 버튼으로
   },
   isSaving: () => excelSaving,
   getFiles: () => state.files,
   hasResult: () => Boolean(state.analysis?.result),
   currentDevice: () => state.analysis?.result?.equipment.serial || '?',
+  say,
   onBlock: (reason) => {
     if (reason === watchBlock) return;
     watchBlock = reason;
