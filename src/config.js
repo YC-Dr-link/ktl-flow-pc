@@ -81,8 +81,8 @@ export const config = {
   // 원본 표기 (M5에서 사용). core 결과의 overall은 pass/fail을 '적합'/'부적합'으로 쓴다
   overallLabels: { pass: '적 합', fail: '부적합' },
 
-  // FR-M5-06, Q12: 저장 파일 이름 (M5에서 사용)
-  fileNamePattern: '{접수번호} {회사명} CLAYDOX.xlsx',
+  // 저장 파일 이름. hub #16 PM 제안대로 회사명은 파일 안에만 둔다 (공백 · 특수문자 위험). {회사명}도 쓸 수 있다
+  fileNamePattern: '{접수번호}_유속계.xlsx',
 };
 
 export default config;

@@ -55,7 +55,7 @@ describe('checkTemplate — 고른 양식 파일 검사', () => {
 describe('합성 양식으로 Excel 만들기', () => {
   it('시트 6개에 값이 들어가고 차트 캐시가 바뀐다', async () => {
     const { bytes, fileName } = await buildXlsx(synthetic(), result, summaries, {});
-    assert.match(fileName, /CLAYDOX\.xlsx$/);
+    assert.equal(fileName, '25-123456-01-1_유속계.xlsx'); // 접수번호_유속계.xlsx (hub #16)
     const book = await openXlsx(bytes);
     assert.deepEqual(book.sheetNames, names);
     assert.equal(book.sheets[names[2]].cell('B1'), result.equipment.receipt_no);
