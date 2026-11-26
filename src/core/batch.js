@@ -17,16 +17,21 @@ export function describeFile(f, config = defaultConfig) {
   return { slot, receipt_no, serial, key: `${receipt_no}|${serial}`, calibrationTime: evidence.calibrationTime };
 }
 
-// current: 지금 화면의 파일([{ name, bytes }], 없으면 []), incoming: 기준과 달라진 파일([{ name, bytes, lastModified }])
+// current: 지금 화면의 파일([{ name, bytes }], 없으면 []), incoming: 기준과 달라진 파일([{ name, bytes, lastModified }]),
+// currentSlots: 지금 화면의 칸 배정 { 칸 id: current 번호 } (사람이 직접 고른 칸 포함). 주면 자동 판별 대신 이것을 쓴다
 // 반환: { replace: { slots: [{ slot, name, oldTime, newTime }], batch, superseded } | null,
 //        next: [{ key, receipt_no, serial, unknown, count, ready, batch, superseded }], ignored: [이름], unchanged: [이름] }
 // unchanged: 지금 화면의 같은 칸 파일과 바이트가 같은 파일. 바뀐 것이 없으므로 묻지 않고 기준에 넣으면 된다
 // superseded: 같은 칸에서 더 최근 파일에 진 파일 이름. 그 묶음을 쓸 때 함께 기준에 넣어 다시 묻지 않게 한다
-export function planFolder({ current, incoming }, config = defaultConfig) {
+export function planFolder({ current, incoming, currentSlots = null }, config = defaultConfig) {
   // 접수번호나 기기 번호를 읽지 못하면 같은 기기인지 알 수 없으므로 지금 기기와 묶지 않는다
   // TODO(확인 필요): 실제 CSV에서 5행 기기 번호가 비는 경우가 있는지
   const known = (d) => Boolean(d.receipt_no && d.serial);
-  const cur = current.map((f) => ({ f, d: describeFile(f, config) }));
+  const slotOfIndex = currentSlots ? new Map(Object.entries(currentSlots).map(([slot, i]) => [i, slot])) : null;
+  const cur = current.map((f, i) => {
+    const d = describeFile(f, config);
+    return { f, d: slotOfIndex ? { ...d, slot: slotOfIndex.get(i) ?? null } : d };
+  });
   const curKey = cur.find((c) => c.d.slot && known(c.d))?.d.key ?? null;
   const ignored = [];
   const groups = new Map(); // 열쇠 → { receipt_no, serial, unknown, first, bySlot: Map(칸 → { f, d }), superseded: [] }
@@ -50,7 +55,7 @@ export function planFolder({ current, incoming }, config = defaultConfig) {
   let replace = null;
   const unchanged = [];
   if (curKey && groups.has(curKey)) {
-    const { bySlot, superseded } = groups.get(curKey);
+    const { bySlot, superseded, receipt_no, serial } = groups.get(curKey);
     groups.delete(curKey);
     const curBySlot = new Map(cur.filter((c) => c.d.slot).map((c) => [c.d.slot, c]));
     for (const [slot, { f }] of [...bySlot]) {
@@ -61,6 +66,8 @@ export function planFolder({ current, incoming }, config = defaultConfig) {
     }
     if (bySlot.size) {
       replace = {
+        receipt_no,
+        serial,
         slots: SLOTS.filter((s) => bySlot.has(s.id)).map((s) => ({
           slot: s.id,
           name: bySlot.get(s.id).f.name,

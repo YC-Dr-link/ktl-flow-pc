@@ -9,7 +9,7 @@ import { createOptionalForm } from './inputs.js';
 import { renderMapPreview } from './mapPreview.js';
 import { noticeList } from './noticeList.js';
 import { safeDownloadName } from './fileName.js';
-import { createFolderWatch } from './folderWatch.js';
+import { createFolderWatch, focusAfter } from './folderWatch.js';
 import { createReceiptForm } from './receiptForm.js';
 
 const $ = (id) => document.getElementById(id);
@@ -363,17 +363,25 @@ placeRail();
 // 폴더 감시 (#23). 다른 기기는 지금 결과를 저장할 때까지 기다리고, 넘어갈 때는 저장 화면에서 결과 화면으로 돌아간다
 const folderWatch = createFolderWatch({
   analyze,
-  load: (files, note) => {
-    const saved = $('saveMsg').dataset.state === 'saved' ? $('saveMsg').textContent : ''; // 방금 저장한 안내는 남긴다
+  // afterSave: 방금 저장한 뒤 자동으로 넘어온 경우에만 「저장했습니다」를 남긴다 (저장하지 않은 기기를 저장한 것처럼 보이지 않게)
+  load: (files, note, { afterSave = false } = {}) => {
+    const savedName = afterSave && $('saveMsg').dataset.state === 'saved' ? $('saveName').textContent : '';
     if (state.screen === 'save') goBack();
     load(files);
     const serial = state.analysis?.result?.equipment.serial;
-    if (saved) setMsg('saved', 'ok', `${saved} · 다음 기기(기기 번호 ${serial || '?'}) 결과로 넘어왔습니다.`);
+    if (savedName) setMsg('movedAfterSave', 'ok', `저장했습니다: ${savedName} · 다음 기기(기기 번호 ${serial || '?'}) 결과로 넘어왔습니다.`);
     say(`${note} ${state.analysis?.result ? announce() : `오류 ${state.analysis.errors.length}건이 있습니다.`}`);
-    $('saveBtn').focus(); // 누른 버튼이 숨으므로 초점을 저장 버튼으로
+    focusAfter(); // 누른 버튼이 숨으므로
   },
   isSaving: () => excelSaving,
   getFiles: () => state.files,
+  // 지금 칸 배정 (사람이 직접 고른 칸 포함). 폴더 감시가 교체 묶음을 만들 때 쓴다
+  getSlots: () =>
+    Object.fromEntries(
+      Object.entries(state.analysis?.slots ?? {})
+        .filter(([, slot]) => slot.fileIndex != null)
+        .map(([id, slot]) => [id, slot.fileIndex]),
+    ),
   hasResult: () => Boolean(state.analysis?.result),
   currentDevice: () => state.analysis?.result?.equipment.serial || '?',
   say,

@@ -24,6 +24,12 @@ function fileStamp(file) {
   return file ? JSON.stringify([file.name, file.size, file.lastModified]) : '';
 }
 
+// 누른 버튼이 숨을 때 초점을 옮긴다. 저장 버튼이 꺼져 있으면 focus()가 듣지 않으므로 본문(main, tabindex=-1)으로
+export function focusAfter() {
+  const btn = $('saveBtn');
+  (btn.disabled ? $('main') : btn).focus();
+}
+
 // 같은 글을 다시 쓰면 role=status가 다시 읽으므로, 바뀔 때만 쓴다
 function setText(el, text) {
   if (el.textContent !== text) el.textContent = text;
@@ -32,9 +38,9 @@ function setText(el, text) {
 const deviceText = (n) => (n.unknown ? `기기 번호를 읽을 수 없음 · 접수번호 ${n.receipt_no || '?'}` : `기기 번호 ${n.serial} · 접수번호 ${n.receipt_no}`);
 
 // analyze · isSaving: 화면 함수, load(files, note): 묶음을 화면에 넣는다, getFiles(): 지금 화면의 CSV, hasResult(): 지금 결과가 있는지,
-// currentDevice(): 지금 기기 번호, onBlock(이유 | null): 교체를 정하기 전 저장을 막는다, say(글): 화면 낭독.
+// getSlots(): 지금 칸 배정 { 칸 id: 파일 번호 }, currentDevice(): 지금 기기 번호, onBlock(이유 | null): 교체를 정하기 전 저장을 막는다, say(글): 화면 낭독.
 // 반환: { notifySaved(files) } — 저장을 마치면 저장을 시작할 때의 파일 목록으로 부른다
-export function createFolderWatch({ analyze, load, isSaving, getFiles, hasResult, currentDevice, onBlock, say }) {
+export function createFolderWatch({ analyze, load, isSaving, getFiles, getSlots, hasResult, currentDevice, onBlock, say }) {
   const folderStart = $('csvFolderStart');
   const folderStop = $('csvFolderStop');
   const folderStatus = $('csvFolderStatus');
@@ -45,6 +51,14 @@ export function createFolderWatch({ analyze, load, isSaving, getFiles, hasResult
   const btnKeep = $('watchKeep');
   const btnNext = $('watchNext');
   let watchSession = null;
+
+  // 1초마다 render가 pending을 새로 만들므로, 같은 선택인지는 종류와 파일 이름으로 본다
+  const samePending = (a, b) => Boolean(a && b) && a.kind === b.kind && a.names.join('|') === b.names.join('|');
+  const replan = (session) => {
+    session.plan = planFolder({ current: getFiles(), incoming: session.batch, currentSlots: getSlots() });
+    session.planFiles = getFiles();
+    session.validCache = new Map();
+  };
 
   const changedFiles = (session, files) => [...files.values()].filter((file) => fileStamp(file) !== fileStamp(session.baseline.get(file.name)));
 
@@ -87,7 +101,8 @@ export function createFolderWatch({ analyze, load, isSaving, getFiles, hasResult
   }
 
   // 묶음을 화면에 넣고, 그 파일들과 같은 칸에서 진 파일을 기준에 넣는다
-  function take(session, pending, note) {
+  // afterSave: 지금 기기를 저장한 뒤 자동으로 넘어가는 경우 (저장 안내를 남길지 화면이 정한다)
+  function take(session, pending, note, { afterSave = false } = {}) {
     settle(session, [...pending.names, ...pending.superseded]);
     session.savedFiles = null;
     clearPending(session);
@@ -95,7 +110,7 @@ export function createFolderWatch({ analyze, load, isSaving, getFiles, hasResult
     session.signature = '';
     session.note = note;
     setText(folderStatus, note);
-    load(pending.batch.map(({ name, bytes }) => ({ name, bytes })), note);
+    load(pending.batch.map(({ name, bytes }) => ({ name, bytes })), note, { afterSave });
   }
 
   // 같은 묶음의 검증 결과는 바뀌지 않으므로 계획마다 한 번만 계산한다
@@ -113,10 +128,11 @@ export function createFolderWatch({ analyze, load, isSaving, getFiles, hasResult
     // 1) 같은 기기 재측정 → 교체를 묻고, 정하기 전에는 저장을 막는다. 아직 짝이 덜 와서 검증을 못 통과해도 막는다
     if (plan.replace) {
       const what = plan.replace.slots.map((s) => SLOT_NAMES[s.slot]).join(' · ');
-      const times = [...new Set(plan.replace.slots.map((s) => `${s.oldTime} → ${s.newTime}`))].join(', ');
+      const times = [...new Set(plan.replace.slots.map((s) => (s.oldTime ? `${s.oldTime} → ${s.newTime}` : `새 칸 ${s.newTime}`)))].join(', ');
+      const verb = plan.replace.slots.every((s) => !s.oldTime) ? '들어왔습니다' : '다시 저장됐습니다';
       const names = plan.replace.slots.map((s) => s.name);
       folderApply.hidden = true;
-      const head = `기기 번호 ${currentDevice()}의 ${what}가 다시 저장됐습니다 (교정 ${times}).`;
+      const head = `기기 번호 ${plan.replace.serial}의 ${what}가 ${verb} (교정 ${times}).`;
       if (valid(session, plan.replace.batch)) {
         session.pending = { kind: 'replace', batch: plan.replace.batch, names, superseded: plan.replace.superseded };
         showBanner(`${head} 교체할까요?`, { replace: true });
@@ -141,7 +157,9 @@ export function createFolderWatch({ analyze, load, isSaving, getFiles, hasResult
         folderStatus,
         ready
           ? `새 검사 데이터 6개가 준비됐습니다. 반영을 누르면 결과를 갱신합니다. 파일: ${session.pending.names.join(', ')}${ignoredNote}`
-          : `장비 폴더 감시 중 · 새로 저장되거나 변경된 CSV ${waiting ? waiting.count : 0}/6개${ignoredNote}`,
+          : waiting?.ready
+            ? `CSV 6개가 모였지만 검증을 통과하지 못했습니다. 넣은 파일을 확인하세요.${ignoredNote}`
+            : `장비 폴더 감시 중 · 새로 저장되거나 변경된 CSV ${waiting ? waiting.count : 0}/6개${ignoredNote}`,
       );
       return;
     }
@@ -154,12 +172,14 @@ export function createFolderWatch({ analyze, load, isSaving, getFiles, hasResult
       return;
     }
     session.pending = ready ? pendingOf('next') : null;
-    if (ready && session.savedFiles && session.savedFiles === getFiles()) session.autoNext = true; // 다음 검사에서 다시 확인하고 넘어간다
+    session.autoNext = ready && Boolean(session.savedFiles) && session.savedFiles === getFiles(); // 다음 검사에서 다시 확인하고 넘어간다
     const now = `지금 화면은 기기 번호 ${currentDevice()} 결과입니다.`;
     showBanner(
       ready
         ? `다음 기기(${deviceText(waiting)}) CSV 6개가 준비됐습니다. ${now} 저장하면 다음 기기로 넘어갑니다.`
-        : `다음 기기(${deviceText(waiting)}) CSV ${waiting.count}/6개 대기 중. ${now}`,
+        : waiting.ready
+          ? `다음 기기(${deviceText(waiting)}) CSV 6개가 모였지만 검증을 통과하지 못했습니다. 그 CSV를 확인하세요. ${now}`
+          : `다음 기기(${deviceText(waiting)}) CSV ${waiting.count}/6개 대기 중. ${now}`,
       { next: ready },
     );
     setText(folderStatus, `장비 폴더 감시 중 · 다음 기기 CSV ${waiting.count}/6개${ignoredNote}`);
@@ -177,11 +197,7 @@ export function createFolderWatch({ analyze, load, isSaving, getFiles, hasResult
         session.plan = null;
       }
       // 손으로 CSV를 넣어 지금 화면의 파일이 바뀌었으면 계획을 다시 세운다
-      if (session.plan && session.planFiles !== getFiles()) {
-        session.plan = planFolder({ current: getFiles(), incoming: session.batch });
-        session.planFiles = getFiles();
-        session.validCache = new Map();
-      }
+      if (session.plan && session.planFiles !== getFiles()) replan(session);
       const nonEmpty = changed.filter((f) => f.size > 0); // 빈 CSV 하나 때문에 감시 전체가 멈추지 않게 뺀다
       if (!changed.length) {
         if (session.pending) clearPending(session);
@@ -192,9 +208,7 @@ export function createFolderWatch({ analyze, load, isSaving, getFiles, hasResult
         session.incoming = new Map(changed.map((f) => [f.name, f]));
         session.empties = changed.filter((f) => f.size === 0).map((f) => f.name);
         session.batch = batch;
-        session.plan = planFolder({ current: getFiles(), incoming: batch });
-        session.planFiles = getFiles();
-        session.validCache = new Map();
+        replan(session);
         session.note = '';
         render(session);
       } else if (session.plan) {
@@ -206,7 +220,10 @@ export function createFolderWatch({ analyze, load, isSaving, getFiles, hasResult
         session.autoNext = false;
         const pending = session.pending;
         const same = await stillSame(session, pending.names);
-        if (watchSession === session && same && !isSaving() && session.pending === pending) take(session, pending, '다음 기기 결과를 불러왔습니다. 같은 폴더에서 다음 CSV를 기다립니다.');
+        const stillSaved = session.savedFiles && session.savedFiles === getFiles() && session.planFiles === getFiles();
+        if (watchSession === session && same && stillSaved && !isSaving() && samePending(session.pending, pending)) {
+          take(session, session.pending, '다음 기기 결과를 불러왔습니다. 같은 폴더에서 다음 CSV를 기다립니다.', { afterSave: true });
+        }
       }
     } catch (error) {
       if (watchSession !== session) return;
@@ -268,14 +285,18 @@ export function createFolderWatch({ analyze, load, isSaving, getFiles, hasResult
       for (const b of [folderApply, btnReplace, btnNext]) b.disabled = false;
     }
     // 폴더를 다시 읽는 사이 저장이 시작됐거나 감시를 멈췄거나 계획이 바뀌었으면 넣지 않는다
-    if (watchSession !== session || isSaving() || session.pending !== pending) return;
-    if (!same) {
+    if (watchSession !== session || isSaving() || !samePending(session.pending, pending)) return;
+    // 계획을 세운 뒤 손으로 CSV를 넣었으면 그 파일을 덮어쓰지 않도록 다시 계획한다
+    if (!same || session.planFiles !== getFiles()) {
       clearPending(session);
       session.plan = null;
       session.signature = '';
+      const msg = !same ? '파일이 다시 바뀌어 다시 확인합니다.' : '화면의 CSV가 바뀌어 다시 확인합니다.';
+      setText(folderStatus, msg);
+      say(msg);
       return;
     }
-    take(session, pending, note);
+    take(session, session.pending, note);
   }
 
   folderApply.addEventListener('click', () => apply('first', '새 검사 결과를 반영했습니다. 같은 폴더에서 다음 CSV 6개를 기다립니다.'));
@@ -291,7 +312,7 @@ export function createFolderWatch({ analyze, load, isSaving, getFiles, hasResult
     session.note = '다시 저장된 CSV를 쓰지 않고 지금 결과를 그대로 둡니다.';
     setText(folderStatus, session.note);
     say(session.note);
-    $('saveBtn').focus(); // 누른 버튼이 숨으므로 초점을 저장 버튼으로
+    focusAfter(); // 누른 버튼이 숨으므로
   });
 
   folderStop.addEventListener('click', () => {

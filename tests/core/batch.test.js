@@ -100,3 +100,13 @@ test('지금 화면과 바이트가 같은 파일은 교체로 묻지 않고 unc
   const mixed = planFolder({ current, incoming: [stamp(sample.rep_summary, 'same.csv'), stamp(retimed(sample.rep_source), 'new.csv')] });
   assert.deepEqual([mixed.unchanged, mixed.replace.slots.map((s) => s.name)], [['same.csv'], ['new.csv']]);
 });
+
+test('currentSlots를 주면 사람이 직접 고른 칸 배정을 쓴다 (자동 판별이 못 한 칸도 교체 묶음에 들어간다)', () => {
+  // 지금 화면 파일 순서를 섞고, 칸 배정을 직접 알려 준다
+  const order = [5, 4, 3, 2, 1, 0];
+  const shuffled = order.map((i) => current[i]);
+  const currentSlots = Object.fromEntries(SLOT_IDS.map((id, i) => [id, order.indexOf(i)]));
+  const plan = planFolder({ current: shuffled, incoming: [stamp(retimed(sample.rep_summary), 'rep2.csv')], currentSlots });
+  assert.equal(plan.replace.batch.length, 6);
+  assert.deepEqual([plan.replace.serial, plan.replace.batch[0].name], [SERIAL, 'rep2.csv']);
+});
