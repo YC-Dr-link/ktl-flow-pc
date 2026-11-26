@@ -13,6 +13,7 @@ import { safeDownloadName } from './fileName.js';
 import { createFolderWatch, focusAfter } from './folderWatch.js';
 import { createReceiptForm } from './receiptForm.js';
 import { WORKBOOK_LIMITS } from '../excel/workbookSafety.js';
+import { writeSnapshot } from './saveSnapshot.js';
 
 const $ = (id) => document.getElementById(id);
 const fromBase64 = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
@@ -331,32 +332,40 @@ async function save() {
   const { summaries } = state.analysis;
   const result = confirmedResult();
   const savingFiles = state.files; // 저장하는 사이 화면이 바뀌어도 「이 파일을 저장함」을 정확히 알리려고 잡아 둔다
+  const savingAnalysis = state.analysis;
+  const savingTemplate = state.template;
   const source = { files: savingFiles, analysis: state.analysis, confirmedAt: new Date().toISOString() };
   const template = state.template.bytes;
   const values = optionalForm.values();
+  const confirmation = JSON.stringify([receiptForm.values(), values]);
+  const isCurrent = async () => {
+    const folderCurrent = await folderWatch.checkBeforeSave(savingFiles);
+    const same = folderCurrent && !watchBlock && state.files === savingFiles && state.analysis === savingAnalysis && state.template === savingTemplate && inputsValid() && confirmation === JSON.stringify([receiptForm.values(), optionalForm.values()]);
+    if (!same) {
+      if (watchBlock) syncSaveBlock();
+      else setMsg('changed', 'err', '저장 중 CSV·양식·확인 입력이 바뀌어 저장을 멈췄습니다. 현재 결과와 입력을 확인한 뒤 다시 저장하세요.');
+    }
+    return same;
+  };
   excelSaving = true;
   syncSaveBtn();
-  let writer;
   try {
     const target = await window.showSaveFilePicker({
       suggestedName: safeDownloadName(outputFileName(result)), // 접수번호_유속계.xlsx. 길이 상한·방향 제어 문자 제거 (보안 L2)
       types: [{ description: 'Excel 통합 문서', accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] } }],
       excludeAcceptAllOption: true,
     });
+    if (!(await isCurrent())) return;
     setMsg('saving', '', 'Excel을 만드는 중입니다…');
     const t0 = performance.now();
     const { bytes } = await buildXlsx(template, result, summaries, values, undefined, source);
     document.body.dataset.excelMs = String(Math.round(performance.now() - t0)); // 성능 시험용 (화면에는 보이지 않음)
-    writer = await target.createWritable();
-    await writer.write(bytes);
-    await writer.close();
-    writer = null;
+    if (!(await writeSnapshot(target, bytes, isCurrent))) return;
     setMsg('saved', 'ok', `저장했습니다: ${target.name}`);
     $('saveName').textContent = target.name;
     say('Excel을 저장했습니다.');
     folderWatch.notifySaved(savingFiles); // 다음 기기가 기다리고 있으면 넘어간다 (#23 B안)
   } catch (error) {
-    if (writer) await writer.abort().catch(() => {});
     if (error.name === 'AbortError') setMsg('cancelled', '', 'Excel 저장을 취소했습니다.');
     else {
       console.error(error); // 원문은 개발자 도구에만 남긴다 (라이브러리 오류는 영문일 수 있음)

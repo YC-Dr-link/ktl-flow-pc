@@ -5,13 +5,17 @@ const $ = (id) => document.getElementById(id);
 const SLOT_NAMES = { rep_summary: '반복성 요약', rep_source: '반복성 source', lin_summary: '직선성 요약', lin_source: '직선성 source', sen_summary: '민감도 요약', sen_source: '민감도 source' };
 const STABLE_MS = 3000; // 파일 쓰기가 끝났다고 볼 때까지 그대로 있어야 하는 시간
 const RETRY_ERRORS = ['NotReadableError', 'NotFoundError']; // 장비가 쓰는 중이거나 지운 파일. 다음 검사에서 다시 본다
+const CHECKING = '장비 폴더의 CSV가 바뀌어 확인 중입니다. 확인과 교체 선택을 마친 뒤 저장하세요.';
+const READ_ERROR = '장비 폴더를 읽지 못해 저장을 멈췄습니다. 접근 권한을 확인하거나 감시 중지를 누른 뒤 CSV를 직접 확인하세요.';
 
 async function readCsvFolder(directory) {
   const files = new Map();
   for await (const [name, entry] of directory.entries()) {
     if (entry.kind === 'file' && /\.csv$/i.test(name)) {
       try {
-        files.set(name, await entry.getFile());
+        const file = await entry.getFile();
+        if (file.size > 25 * 1024 * 1024) throw new Error('CSV 파일은 25 MB 이하여야 합니다.');
+        files.set(name, file);
       } catch (error) {
         if (error.name !== 'NotFoundError') throw error;
       }
@@ -40,7 +44,7 @@ const deviceText = (n) => (n.unknown ? `기기 번호를 읽을 수 없음 · �
 // analyze · isSaving: 화면 함수, load(files, note): 묶음을 화면에 넣는다, getFiles(): 지금 화면의 CSV, hasResult(): 지금 결과가 있는지,
 // getSlots(): 지금 칸 배정 { 칸 id: 파일 번호 }, currentDevice(): 지금 기기 번호, onBlock(이유 | null): 교체를 정하기 전 저장을 막는다, say(글): 화면 낭독.
 // 반환: { notifySaved(files) } — 저장을 마치면 저장을 시작할 때의 파일 목록으로 부른다
-export function createFolderWatch({ analyze, load, isSaving, getFiles, getSlots, hasResult, currentDevice, onBlock, say }) {
+export function createFolderWatch({ analyze, load, isSaving, getFiles, getSlots, hasResult, currentDevice, onBlock, say, now = () => performance.now() }) {
   const folderStart = $('csvFolderStart');
   const folderStop = $('csvFolderStop');
   const folderStatus = $('csvFolderStatus');
@@ -51,6 +55,8 @@ export function createFolderWatch({ analyze, load, isSaving, getFiles, getSlots,
   const btnKeep = $('watchKeep');
   const btnNext = $('watchNext');
   let watchSession = null;
+  let blockReason = null;
+  const block = (reason) => { blockReason = reason; onBlock(reason); };
 
   // 1초마다 render가 pending을 새로 만들므로, 같은 선택인지는 종류와 파일 이름으로 본다
   const samePending = (a, b) => Boolean(a && b) && a.kind === b.kind && a.names.join('|') === b.names.join('|');
@@ -76,17 +82,25 @@ export function createFolderWatch({ analyze, load, isSaving, getFiles, getSlots,
     session.pending = null;
     folderApply.hidden = true;
     showBanner('');
-    onBlock(null);
+    block(null);
   }
 
-  function stopFolderWatch() {
+  function stopFolderWatch(reason = null) {
     if (watchSession) clearTimeout(watchSession.timer);
     watchSession = null;
     folderStart.disabled = false;
-    folderStop.disabled = true;
+    folderStop.disabled = !reason; // 읽기 실패로 멈춘 경우에도 사람이 명시적으로 감시를 중지할 수 있다
     folderApply.hidden = true;
     showBanner('');
-    onBlock(null);
+    block(reason);
+  }
+
+  function hold(session, reason = CHECKING) {
+    session.pending = null;
+    session.autoNext = false;
+    folderApply.hidden = true;
+    showBanner(reason);
+    block(reason);
   }
 
   // 반영 · 교체 직전에 폴더를 다시 읽어, 고른 파일이 그사이 또 바뀌지 않았는지 본다
@@ -125,6 +139,15 @@ export function createFolderWatch({ analyze, load, isSaving, getFiles, getSlots,
     if (plan.unchanged.length) settle(session, plan.unchanged); // 지금 화면과 같은 파일은 묻지 않고 기준에 넣는다
     const empties = session.empties.length ? ` 빈 CSV ${session.empties.length}개는 뺐습니다.` : '';
     const ignoredNote = `${plan.ignored.length ? ` CSV ${plan.ignored.length}개는 종류를 판별할 수 없어 뺐습니다.` : ''}${empties}`;
+    const currentNames = new Set(getFiles().map(f => f.name));
+    const unreadable = [...plan.ignored, ...session.empties].filter(name => currentNames.has(name));
+    if (unreadable.length) {
+      session.pending = { kind: 'unreadable', names: unreadable, superseded: [] };
+      folderApply.hidden = true;
+      showBanner('지금 결과에 쓴 CSV가 비었거나 읽을 수 없게 바뀌었습니다. 파일 쓰기가 끝날 때까지 기다리거나 지금 결과를 그대로 두세요.', { keep: true });
+      block('지금 결과에 쓴 CSV가 바뀌었습니다. 파일을 확인하거나 위 띠에서 지금 결과를 그대로 둘지 정하세요.');
+      return;
+    }
     // 1) 같은 기기 재측정 → 교체를 묻고, 정하기 전에는 저장을 막는다. 아직 짝이 덜 와서 검증을 못 통과해도 막는다
     if (plan.replace) {
       const what = plan.replace.slots.map((s) => SLOT_NAMES[s.slot]).join(' · ');
@@ -140,11 +163,11 @@ export function createFolderWatch({ analyze, load, isSaving, getFiles, getSlots,
         session.pending = { kind: 'replace-wait', batch: null, names, superseded: plan.replace.superseded };
         showBanner(`${head} 아직 짝이 맞는 CSV가 다 오지 않아 검증을 통과하지 못했습니다. 기다리거나 지금 결과를 그대로 두세요.`, { keep: true });
       }
-      onBlock('재측정한 CSV가 들어왔습니다. 위 띠에서 교체할지 정하면 저장할 수 있습니다.');
+      block('재측정한 CSV가 들어왔습니다. 위 띠에서 교체할지 정하면 저장할 수 있습니다.');
       setText(folderStatus, `장비 폴더 감시 중 · 다시 저장된 CSV ${names.length}개${ignoredNote}`);
       return;
     }
-    onBlock(null);
+    block(null);
     const waiting = plan.next.find((n) => n.ready && valid(session, n.batch)) ?? plan.next[0];
     const ready = Boolean(waiting?.ready && valid(session, waiting.batch));
     const pendingOf = (kind) => ({ kind, batch: waiting.batch, names: waiting.batch.map((f) => f.name), superseded: waiting.superseded });
@@ -193,18 +216,19 @@ export function createFolderWatch({ analyze, load, isSaving, getFiles, getSlots,
       const signature = JSON.stringify(changed.map(fileStamp).sort());
       if (signature !== session.signature) {
         session.signature = signature;
-        session.stableSince = performance.now();
+        session.stableSince = now();
         session.plan = null;
+        if (changed.length) hold(session); // 안정화 3초를 기다리는 동안에도 이전 결과 저장을 막는다
       }
       // 손으로 CSV를 넣어 지금 화면의 파일이 바뀌었으면 계획을 다시 세운다
       if (session.plan && session.planFiles !== getFiles()) replan(session);
       const nonEmpty = changed.filter((f) => f.size > 0); // 빈 CSV 하나 때문에 감시 전체가 멈추지 않게 뺀다
       if (!changed.length) {
-        if (session.pending) clearPending(session);
+        if (session.pending || blockReason) clearPending(session);
         setText(folderStatus, session.note || '장비 폴더 감시 중 · 새로 저장되거나 변경된 CSV 0/6개');
-      } else if (!session.plan && performance.now() - session.stableSince >= STABLE_MS) {
+      } else if (!session.plan && now() - session.stableSince >= STABLE_MS) {
         const batch = await Promise.all(nonEmpty.map(async (file) => ({ name: file.name, bytes: new Uint8Array(await file.arrayBuffer()), lastModified: file.lastModified })));
-        if (watchSession !== session) return;
+        if (watchSession !== session || session.signature !== signature) return;
         session.incoming = new Map(changed.map((f) => [f.name, f]));
         session.empties = changed.filter((f) => f.size === 0).map((f) => f.name);
         session.batch = batch;
@@ -214,6 +238,7 @@ export function createFolderWatch({ analyze, load, isSaving, getFiles, getSlots,
       } else if (session.plan) {
         render(session); // 저장 · 손으로 넣기 같은 화면 변화에 맞춰 띠를 다시 그린다
       } else {
+        hold(session);
         setText(folderStatus, `장비 폴더 감시 중 · 새로 저장되거나 변경된 CSV ${changed.length}개 확인 중`);
       }
       if (session.autoNext && session.pending?.kind === 'next' && !isSaving()) {
@@ -228,16 +253,21 @@ export function createFolderWatch({ analyze, load, isSaving, getFiles, getSlots,
     } catch (error) {
       if (watchSession !== session) return;
       if (!RETRY_ERRORS.includes(error.name)) {
-        stopFolderWatch();
-        setText(folderStatus, '폴더를 읽을 수 없습니다. 폴더 접근 권한을 확인하고 다시 선택해 주세요.');
+        stopFolderWatch(READ_ERROR);
+        setText(folderStatus, READ_ERROR);
         return;
       }
-      session.stableSince = performance.now();
+      session.stableSince = now();
+      session.signature = '';
+      session.plan = null;
+      hold(session, '장비가 CSV를 쓰는 중이거나 파일을 읽지 못했습니다. 다시 확인할 때까지 저장을 기다려 주세요.');
+    } finally {
+      if (watchSession === session) session.timer = setTimeout(() => scanFolder(session), 1000);
     }
-    if (watchSession === session) session.timer = setTimeout(() => scanFolder(session), 1000);
   }
 
   folderStart.addEventListener('click', async () => {
+    const previousBlock = blockReason;
     folderStart.disabled = true;
     try {
       const directory = await window.showDirectoryPicker({ mode: 'read' });
@@ -249,7 +279,7 @@ export function createFolderWatch({ analyze, load, isSaving, getFiles, getSlots,
         batch: [],
         empties: [],
         signature: '',
-        stableSince: performance.now(),
+        stableSince: now(),
         plan: null,
         planFiles: null,
         validCache: new Map(),
@@ -259,9 +289,9 @@ export function createFolderWatch({ analyze, load, isSaving, getFiles, getSlots,
         autoNext: false,
       };
       folderStop.disabled = false;
-      scanFolder(watchSession);
+      await scanFolder(watchSession);
     } catch (error) {
-      stopFolderWatch();
+      stopFolderWatch(previousBlock);
       setText(folderStatus, error.name === 'AbortError' ? '폴더 선택을 취소했습니다.' : '폴더를 열 수 없습니다. Edge 또는 Chrome에서 폴더 접근을 허용해 주세요.');
     }
   });
@@ -277,8 +307,8 @@ export function createFolderWatch({ analyze, load, isSaving, getFiles, getSlots,
       same = await stillSame(session, pending.names);
     } catch (error) {
       if (!RETRY_ERRORS.includes(error.name)) {
-        stopFolderWatch();
-        setText(folderStatus, '폴더를 읽을 수 없습니다. 접근 권한을 확인하고 다시 선택해 주세요.');
+        stopFolderWatch(READ_ERROR);
+        setText(folderStatus, READ_ERROR);
         return;
       }
     } finally {
@@ -288,7 +318,7 @@ export function createFolderWatch({ analyze, load, isSaving, getFiles, getSlots,
     if (watchSession !== session || isSaving() || !samePending(session.pending, pending)) return;
     // 계획을 세운 뒤 손으로 CSV를 넣었으면 그 파일을 덮어쓰지 않도록 다시 계획한다
     if (!same || session.planFiles !== getFiles()) {
-      clearPending(session);
+      hold(session);
       session.plan = null;
       session.signature = '';
       const msg = !same ? '파일이 다시 바뀌어 다시 확인합니다.' : '화면의 CSV가 바뀌어 다시 확인합니다.';
@@ -304,7 +334,7 @@ export function createFolderWatch({ analyze, load, isSaving, getFiles, getSlots,
   btnNext.addEventListener('click', () => apply('next', '지금 결과를 저장하지 않고 다음 기기로 넘어갔습니다.'));
   btnKeep.addEventListener('click', () => {
     const session = watchSession;
-    if (!session || !['replace', 'replace-wait'].includes(session.pending?.kind)) return;
+    if (!session || isSaving() || !['replace', 'replace-wait', 'unreadable'].includes(session.pending?.kind)) return;
     settle(session, [...session.pending.names, ...session.pending.superseded]); // 다시 묻지 않는다
     clearPending(session);
     session.plan = null;
@@ -326,6 +356,34 @@ export function createFolderWatch({ analyze, load, isSaving, getFiles, getSlots,
   }
 
   return {
+    // 저장 위치 선택·생성·쓰기 사이에 실제 폴더를 다시 확인한다. 다음 정기 검사만 기다리지 않는다.
+    async checkBeforeSave(files) {
+      const session = watchSession;
+      if (files !== getFiles()) return false;
+      if (!session) return !blockReason;
+      try {
+        const latest = await readCsvFolder(session.directory);
+        if (watchSession !== session || files !== getFiles()) return false;
+        const changed = changedFiles(session, latest);
+        const signature = JSON.stringify(changed.map(fileStamp).sort());
+        if (signature !== session.signature) {
+          session.signature = signature;
+          session.stableSince = now();
+          session.plan = null;
+          if (!changed.length) clearPending(session);
+          else hold(session);
+        } else if (changed.length && !session.plan) hold(session);
+        return !blockReason;
+      } catch {
+        if (watchSession === session) {
+          session.plan = null;
+          session.signature = '';
+          session.stableSince = now();
+          hold(session, READ_ERROR);
+        }
+        return false;
+      }
+    },
     // files: 저장을 시작할 때 화면에 있던 CSV. 저장하는 사이 화면이 바뀌었으면 「저장함」으로 치지 않는다
     notifySaved(files) {
       if (!watchSession || files !== getFiles()) return;
