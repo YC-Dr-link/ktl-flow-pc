@@ -131,6 +131,10 @@ select { appearance: none; padding-right: 40px; background-image: linear-gradien
 .notice ul { margin: 0; padding-left: var(--sp-xl); }
 .notice li + li { margin-top: var(--sp-xs); }
 .notice code { padding: 0 var(--sp-xs); border-radius: var(--sp-xs); background: var(--canvas); font-family: Consolas, "D2Coding", ui-monospace, monospace; font-size: 12px; }
+.notice .next-step { font-weight: 600; } /* 다음에 할 일 (#23) */
+.notice .why { display: inline; margin-left: var(--sp-sm); color: var(--body); font-size: 13px; } /* 영문 코드는 접힌 「근거」 안에만 */
+.notice .why summary { display: inline; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.notice .why[open] summary { margin-right: var(--sp-xs); }
 .notice.err { background: var(--danger-bg); border: 1px solid var(--danger); }
 .notice.err h3 { color: var(--danger); }
 .notice.warn { background: var(--warn-bg); border: 1px solid var(--warn-line); color: var(--warn-ink); }
