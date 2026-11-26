@@ -1,6 +1,7 @@
 // 한 화면 작업대(왼쪽 넣은 파일, 오른쪽 결과)를 묶는 화면 진입점. 판별·검증·계산은 core의 analyze, Excel은 excel의 buildXlsx를 부르기만 한다
 import { analyze } from '../core/analyze.js';
 import { buildXlsx, checkTemplate, outputFileName } from '../excel/buildXlsx.js';
+import { readPreviousGeneral } from '../excel/readPrevious.js';
 import { h, clear } from './dom.js';
 import { renderSlots, resetSlotState } from './slots.js';
 import { renderResult, renderGraphEnv, renderUsedRows } from './results.js';
@@ -194,15 +195,54 @@ function announce() {
   return `6개 파일을 칸에 배정하고 검증을 통과해 결과를 표시했습니다.${extra}`;
 }
 
-// 새 파일 목록으로 바꾸고 처음부터 다시 분석한다. 선택 입력 값도 비운다 (다른 접수 건의 값이 남지 않게)
+// 새 파일 목록으로 바꾸고 처음부터 다시 분석한다. 일반사항 입력은 같은 기기(기기 번호 같음)면 남기고, 다른 기기면 비운다 (#24 사용자 결정).
+// 결과가 없어 기기를 모르면 남겨 두고, 다음에 결과가 나올 때 비교한다
+let formSerial = null; // 지금 일반사항 입력이 속한 기기 번호
 function load(files) {
   state.files = files;
   state.assignment = {};
-  optionalForm.reset();
-  syncOptionalBadge();
   resetSlotState();
   const ok = refresh();
-  say(ok ? announce() : `오류 ${state.analysis.errors.length}건이 있습니다. 오류 내용을 확인하세요.`);
+  const serial = state.analysis?.result?.equipment.serial || null;
+  let cleared = '';
+  if (serial && formSerial && serial !== formSerial && optionalForm.hasValues()) {
+    optionalForm.reset();
+    cleared = `다른 기기(기기 번호 ${serial})라 일반사항 입력을 비웠습니다.`;
+  }
+  if (serial) formSerial = serial;
+  $('optionalNotice').hidden = !cleared;
+  $('optionalNotice').textContent = cleared;
+  syncOptionalBadge();
+  syncSaveBtn();
+  syncSaveBlock();
+  say(`${ok ? announce() : `오류 ${state.analysis.errors.length}건이 있습니다. 오류 내용을 확인하세요.`}${cleared ? ` ${cleared}` : ''}`);
+}
+
+// 「작년 Excel에서 불러오기」 (#24): 같은 기기의 작년 파일이면 비어 있는 칸만 채운다
+async function onPrevious(file) {
+  if (!file) return;
+  const status = $('prevStatus');
+  const show = (text, bad = false) => {
+    status.textContent = text;
+    status.classList.toggle('bad', bad);
+  };
+  let prev;
+  try {
+    prev = await readPreviousGeneral(new Uint8Array(await file.arrayBuffer()));
+  } catch (e) {
+    show(e.message, true); // readPreviousGeneral의 오류는 화면에 보여 줄 한국어 문구다
+    return;
+  }
+  const now = state.analysis?.result?.equipment.serial;
+  if (now && prev.serial && prev.serial !== now) {
+    show(`작년 파일의 기기 번호(${prev.serial})가 지금 기기(${now})와 다릅니다. 같은 기기의 파일을 고르세요.`, true);
+    return;
+  }
+  const n = optionalForm.fill(prev.values);
+  formSerial = now || formSerial;
+  $('optionalNotice').hidden = true;
+  show(n ? `작년 파일 ${file.name}에서 ${n}칸을 채웠습니다 (이미 넣은 칸은 그대로).` : `작년 파일 ${file.name}에서 채울 빈 칸이 없습니다.`);
+  say(status.textContent);
 }
 
 async function onFiles(fileList) {
@@ -306,6 +346,10 @@ $('fileInput').addEventListener('change', (e) => {
 });
 $('templateInput').addEventListener('change', async (e) => {
   await onTemplate(e.target.files[0]);
+  e.target.value = '';
+});
+$('prevInput').addEventListener('change', async (e) => {
+  await onPrevious(e.target.files[0]);
   e.target.value = '';
 });
 for (const type of ['dragenter', 'dragover']) {
