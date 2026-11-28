@@ -55,7 +55,7 @@ function checkValues(item, slot) {
   return errors;
 }
 
-// 머리글 값 자체가 계산에 쓸 수 있는지: 의뢰기관(1행) 있음, 최대유속(6행) 양수, 교정일(10행)이 연도 4자리 · 월 1~12 · 일 1~31
+// 머리글 값 자체가 계산에 쓸 수 있는지: 의뢰기관(1행) 있음, 최대유속(6행) 양수, 교정일(10행)이 연도 4자리이고 달력에 있는 날
 function checkHeaderValues(item, slot) {
   const errors = [];
   const bad = (row, what) =>
@@ -63,7 +63,7 @@ function checkHeaderValues(item, slot) {
   if (!headerValue(item.file, 1)) bad(1, '비어 있습니다');
   const max = parseNumber(headerValue(item.file, 6));
   if (!(max > 0)) bad(6, '양수 숫자가 아닙니다');
-  if (!parseDate(headerValue(item.file, 10))) bad(10, '날짜(연도 4자리 · 월 1~12 · 일 1~31)가 아닙니다');
+  if (!parseDate(headerValue(item.file, 10))) bad(10, '달력에 있는 날짜(연도 4자리)가 아닙니다');
   return errors;
 }
 
