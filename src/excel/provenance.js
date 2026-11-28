@@ -63,19 +63,19 @@ export async function appendProvenance(zip, provenance, config, generatedAt = ne
   const wb = parseXml(await zip.file(workbookPath).async('string'));
   const rels = parseXml(await zip.file(relPath).async('string'));
   const types = parseXml(await zip.file('[Content_Types].xml').async('string'));
-  const sheets = wb.getElementsByTagName('sheets')[0];
+  const sheets = wb.getElementsByTagNameNS('*', 'sheets')[0];
   if (!sheets) throw new Error('양식의 시트 목록을 읽지 못했습니다.');
-  const existing = [...sheets.getElementsByTagName('sheet')].find(s => s.getAttribute('name') === '출처');
+  const existing = [...sheets.getElementsByTagNameNS('*', 'sheet')].find(s => s.getAttribute('name') === '출처');
   let part;
   if (existing) {
-    const relation = [...rels.getElementsByTagName('Relationship')].find(r => r.getAttribute('Id') === existing.getAttribute('r:id'));
+    const relation = [...rels.getElementsByTagNameNS('*', 'Relationship')].find(r => r.getAttribute('Id') === existing.getAttribute('r:id'));
     const target = relation?.getAttribute('Target');
     part = target?.startsWith('/') ? target.slice(1) : `xl/${target}`;
     if (!zip.file(part)) throw new Error('양식의 출처 시트 경로가 올바르지 않습니다.');
   } else {
     let suffix = 1;
     do { part = `xl/worksheets/provenance${suffix++}.xml`; } while (zip.file(part));
-    const ids = new Set([...rels.getElementsByTagName('Relationship')].map(r => r.getAttribute('Id')));
+    const ids = new Set([...rels.getElementsByTagNameNS('*', 'Relationship')].map(r => r.getAttribute('Id')));
     let id = 'rIdProvenance';
     while (ids.has(id)) id += 'X';
     const relation = rels.createElementNS(rels.documentElement.namespaceURI, 'Relationship');
@@ -83,7 +83,7 @@ export async function appendProvenance(zip, provenance, config, generatedAt = ne
     relation.setAttribute('Target', part.slice(3)); rels.documentElement.appendChild(relation);
     const sheet = wb.createElementNS(SHEET_NS, 'sheet');
     sheet.setAttribute('name', '출처');
-    sheet.setAttribute('sheetId', String(Math.max(0, ...[...sheets.getElementsByTagName('sheet')].map(s => Number(s.getAttribute('sheetId')))) + 1));
+    sheet.setAttribute('sheetId', String(Math.max(0, ...[...sheets.getElementsByTagNameNS('*', 'sheet')].map(s => Number(s.getAttribute('sheetId')))) + 1));
     sheet.setAttributeNS(REL_NS, 'r:id', id); sheets.appendChild(sheet);
     const type = types.createElementNS(types.documentElement.namespaceURI, 'Override');
     type.setAttribute('PartName', `/${part}`);

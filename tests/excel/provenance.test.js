@@ -8,6 +8,8 @@ import { prepareProvenance } from '../../src/excel/provenance.js';
 import { loadSample, toList, SYNTHETIC_TEMPLATE_PATH } from '../helpers/fixture.js';
 import { openXlsx } from '../helpers/xlsx.js';
 import config from '../../src/config.js';
+import JSZip from 'jszip';
+import { parseXml } from '../../src/excel/sheetXml.js';
 
 const template = fs.readFileSync(SYNTHETIC_TEMPLATE_PATH);
 const stamp = '2026-11-26T12:00:00+09:00';
@@ -61,4 +63,29 @@ test('확인한 뒤 입력 바이트나 계산 결과가 바뀌면 출처 생성
   await assert.rejects(prepareProvenance(bad, analysis, analysis.result), /바뀌었습니다/);
   const wrong = { ...analysis.result, sensitivity: { ...analysis.result.sensitivity, value_pct: 999 } };
   await assert.rejects(prepareProvenance(files, analysis, wrong), /다릅니다/);
+});
+
+test('접두사가 있는 workbook·관계 XML에서도 출처를 만들고 재사용한다', async () => {
+  const zip = await JSZip.loadAsync(template);
+  for (const [part, prefix, names, ns] of [
+    ['xl/workbook.xml', 'x', 'workbook|workbookPr|sheets|sheet', 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'],
+    ['xl/_rels/workbook.xml.rels', 'p', 'Relationships|Relationship', 'http://schemas.openxmlformats.org/package/2006/relationships'],
+  ]) {
+    const xml = (await zip.file(part).async('string'))
+      .replace(new RegExp(`(<[/]?)(${names})(?=[\\s/>])`, 'g'), `$1${prefix}:$2`)
+      .replace(new RegExp(`<${prefix}:([^ >]+)`), `<${prefix}:$1 xmlns:${prefix}="${ns}"`);
+    zip.file(part, xml);
+  }
+  const files = toList(loadSample()), analysis = analyze(files);
+  let bytes = await zip.generateAsync({ type: 'uint8array' });
+  for (let i = 0; i < 2; i++) {
+    ({ bytes } = await buildXlsx(bytes, analysis.result, analysis.summaries, {}, config, { files, analysis, confirmedAt: stamp }));
+    const book = await JSZip.loadAsync(bytes);
+    const wb = parseXml(await book.file('xl/workbook.xml').async('string'));
+    const sheets = [...wb.getElementsByTagNameNS('*', 'sheet')];
+    assert.equal(sheets.filter(s => s.getAttribute('name') === '출처').length, 1);
+    assert.equal(sheets.length, 7);
+    const rels = parseXml(await book.file('xl/_rels/workbook.xml.rels').async('string'));
+    assert.equal([...rels.getElementsByTagNameNS('*', 'Relationship')].filter(r => r.getAttribute('Id') === sheets.at(-1).getAttribute('r:id')).length, 1);
+  }
 });

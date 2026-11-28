@@ -1,7 +1,6 @@
 // 한 화면 작업대(왼쪽 넣은 파일, 오른쪽 결과)를 묶는 화면 진입점. 판별·검증·계산은 core의 analyze, Excel은 excel의 buildXlsx를 부르기만 한다
 import { analyze } from '../core/analyze.js';
 import { buildXlsx, checkTemplate, outputFileName } from '../excel/buildXlsx.js';
-import { readPreviousGeneral } from '../excel/readPrevious.js';
 import { h, clear } from './dom.js';
 import { renderSlots, resetSlotState } from './slots.js';
 import { renderResult, renderGraphEnv, renderUsedRows } from './results.js';
@@ -15,6 +14,8 @@ import { createReceiptForm } from './receiptForm.js';
 import { WORKBOOK_LIMITS } from '../excel/workbookSafety.js';
 import { createLatestSelection } from './latestSelection.js';
 import { writeSnapshot } from './saveSnapshot.js';
+import { createPreviousImport } from './previousImport.js';
+import { createUnsavedResult } from './unsavedResult.js';
 
 const $ = (id) => document.getElementById(id);
 const fromBase64 = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
@@ -32,7 +33,7 @@ let excelSaving = false; // 저장 위치를 고르고 파일을 쓰는 동안 t
 let watchBlock = null; // 폴더 감시가 저장을 막는 이유 (재측정 CSV 교체를 묻는 동안, #23). 없으면 null
 const csvSelection = createLatestSelection(syncSelection);
 const templateSelection = createLatestSelection(syncSelection);
-const readingSelection = () => csvSelection.pending || templateSelection.pending;
+const readingSelection = () => csvSelection.pending || templateSelection.pending || previousImport.pending;
 function syncSelection() { syncSaveBtn(); syncSaveBlock(); }
 
 function onInputChange() {
@@ -42,7 +43,20 @@ function onInputChange() {
 }
 const optionalForm = createOptionalForm($('optionalForm'), onInputChange);
 const receiptForm = createReceiptForm($('receiptBox'), onInputChange); // 접수번호 · 회사명 확인 (#23)
+const previousImport = createPreviousImport({
+  onPendingChange: syncSelection,
+  currentSerial: () => state.analysis?.result?.equipment.serial,
+  isBusy: () => excelSaving || csvSelection.pending,
+  fill: values => optionalForm.fill(values),
+  onApplied: serial => { formSerial = serial; $('optionalNotice').hidden = true; },
+  show: (text, bad = false) => {
+    $('prevStatus').textContent = text;
+    $('prevStatus').classList.toggle('bad', bad);
+  },
+});
 const inputsValid = () => receiptForm.valid() && optionalForm.valid();
+const savedResult = createUnsavedResult();
+const inputSnapshot = () => JSON.stringify({ receipt: receiptForm.values(), optional: optionalForm.values() });
 
 // 저장 화면에서 사람이 확인한 접수번호 · 회사명을 넣은 결과. Excel(D2 · D3 · 시트별 B1)과 파일 이름은 이 값을 쓴다
 const confirmedResult = () => {
@@ -77,7 +91,9 @@ function syncSaveBlock() {
   const blocked = ['blocked', 'blockedReceipt', 'blockedWatch', 'readingSelection'].includes(msg.dataset.state);
   const link = () => h('a', { href: '#saveScreen', onClick: goToInvalid }, '고칠 칸으로');
   if (readingSelection()) {
-    const text = csvSelection.pending ? '선택한 CSV를 읽고 있습니다. 확인이 끝나면 저장할 수 있습니다.' : '선택한 양식을 확인하고 있습니다. 확인이 끝나면 저장할 수 있습니다.';
+    const text = csvSelection.pending ? '선택한 CSV를 읽고 있습니다. 확인이 끝나면 저장할 수 있습니다.'
+      : templateSelection.pending ? '선택한 양식을 확인하고 있습니다. 확인이 끝나면 저장할 수 있습니다.'
+        : '작년 Excel을 읽고 있습니다. 확인이 끝나면 저장할 수 있습니다.';
     if (msg.dataset.state !== 'readingSelection' || msg.textContent !== text) setMsg('readingSelection', '', text);
   } else if (watchBlock && state.analysis?.result) {
     if (msg.dataset.state !== 'blockedWatch' || msg.textContent !== watchBlock) setMsg('blockedWatch', 'err', watchBlock);
@@ -142,6 +158,8 @@ function syncSaveBtn() {
   const { screen } = state;
   $('saveBtn').textContent = screen === 'save' ? 'Excel 저장' : 'Excel 만들고 저장';
   $('saveBtn').disabled = excelSaving || readingSelection() || Boolean(watchBlock) || (screen === 'save' ? !inputsValid() : !state.analysis?.result);
+  // 저장 시작 때 확인한 값과 실제 출력이 달라지지 않도록 확정 중에는 입력을 잠근다.
+  for (const input of document.querySelectorAll('#optionalForm input, #receiptBox input, #prevInput, #templateInput, #fileInput, #forgetTemplate, #backBtn')) input.disabled = excelSaving;
 }
 // 상태 낭독. 같은 문구를 연달아 써도 다시 읽히도록 먼저 비우고 잠시 뒤에 쓴다 (스크린리더는 내용이 바뀌어야 읽는다)
 let sayTimer = 0;
@@ -196,9 +214,11 @@ function refresh({ keepReceipt = false } = {}) {
 }
 
 function onPick(slotId, fileIndex) {
+  previousImport.cancel();
   state.assignment = { ...state.assignment, [slotId]: fileIndex };
   const ok = refresh({ keepReceipt: true });
   const cleared = syncFormDevice(); // 칸을 직접 골라 다른 기기 결과가 나온 경우도 비운다 (#24)
+  folderWatch.notifyManualLoad();
   say(`${ok ? announce() : `오류 ${state.analysis.errors.length}건이 있습니다. 오류 내용을 확인하세요.`}${cleared ? ` ${cleared}` : ''}`);
 }
 
@@ -233,6 +253,7 @@ function syncFormDevice() {
 }
 // 반환: 낭독한 문장 (폴더 감시가 자기 안내를 덧붙일 때 이어 쓴다)
 function load(files) {
+  previousImport.cancel();
   csvSelection.cancel(); // 폴더 반영 등 다른 경로에서 파일을 넣어도 이전 선택이 뒤늦게 덮어쓰지 않는다
   state.files = files;
   state.assignment = {};
@@ -245,44 +266,14 @@ function load(files) {
 }
 
 // 「작년 Excel에서 불러오기」 (#24): 같은 기기의 작년 파일이면 비어 있는 칸만 채운다
-async function onPrevious(file) {
-  if (!file) return;
-  const status = $('prevStatus');
-  const show = (text, bad = false) => {
-    status.textContent = text;
-    status.classList.toggle('bad', bad);
-  };
-  let prev;
-  try {
-    if (file.size > WORKBOOK_LIMITS.compressed) throw new Error('작년 파일은 25 MB 이하여야 합니다.');
-    prev = await readPreviousGeneral(new Uint8Array(await file.arrayBuffer()));
-  } catch (e) {
-    show(e instanceof DOMException ? '작년 파일을 읽지 못했습니다. 접근 권한을 확인하고 다시 선택하세요.' : e.message, true);
-    return;
-  }
-  const now = state.analysis?.result?.equipment.serial;
-  // 어느 기기 파일인지 모르면 채우지 않는다 (다른 기기 값이 성적서에 들어가지 않게)
-  if (!now) {
-    show('지금 결과의 기기 번호가 없어 작년 파일과 비교할 수 없습니다. CSV 6개로 결과를 낸 뒤 고르세요.', true);
-    return;
-  }
-  if (!prev.serial) {
-    show('작년 파일의 기기 번호(일반사항 D8)를 읽을 수 없어 채우지 않았습니다. 같은 기기의 파일인지 확인하세요.', true);
-    return;
-  }
-  if (prev.serial !== now) {
-    show(`작년 파일의 기기 번호(${prev.serial})가 지금 기기(${now})와 다릅니다. 같은 기기의 파일을 고르세요.`, true);
-    return;
-  }
-  const n = optionalForm.fill(prev.values);
-  formSerial = now;
-  $('optionalNotice').hidden = true;
-  show(n ? `작년 파일 ${file.name}에서 ${n}칸을 채웠습니다 (이미 넣은 칸은 그대로).` : `작년 파일 ${file.name}에서 채울 빈 칸이 없습니다.`); // #prevStatus(role=status)가 읽는다
-}
+const onPrevious = file => previousImport.select(file);
 
 async function onFiles(fileList) {
   const picked = [...fileList];
   if (!picked.length || excelSaving) return;
+  if (savedResult.needsConfirmation(state.files, state.analysis, inputSnapshot()) &&
+      !window.confirm('현재 결과를 아직 저장하지 않았습니다. 새 CSV로 바꾸면 현재 결과와 접수 확인 내용이 바뀝니다. 교체할까요?')) return;
+  previousImport.cancel();
   await csvSelection.run(async () => {
     if (picked.length > 6 || picked.some(f => f.size > WORKBOOK_LIMITS.compressed)) {
       throw new Error('CSV는 한 검사분 6개까지, 파일당 25 MB 이하로 선택하세요.');
@@ -290,8 +281,10 @@ async function onFiles(fileList) {
     return Promise.all(picked.map(async (f) => ({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) })));
   }, files => {
     load(files);
+    folderWatch.notifyManualLoad();
   }, error => {
     load([]);
+    folderWatch.notifyManualLoad();
     setMsg('failed', 'err', error instanceof DOMException ? 'CSV를 읽지 못했습니다. 접근 권한을 확인하고 다시 선택하세요.' : error.message);
   });
 }
@@ -355,6 +348,7 @@ async function save() {
   };
   const template = state.template.bytes;
   const values = optionalForm.values();
+  const savingInputs = inputSnapshot();
   excelSaving = true;
   syncSaveBtn();
   try {
@@ -369,6 +363,7 @@ async function save() {
     const { bytes } = await buildXlsx(template, result, summaries, values, undefined, source);
     document.body.dataset.excelMs = String(Math.round(performance.now() - t0)); // 성능 시험용 (화면에는 보이지 않음)
     if (!(await writeSnapshot(target, bytes, () => !stale()))) return staleStop();
+    savedResult.markSaved(savingFiles, savingAnalysis, savingInputs);
     setMsg('saved', 'ok', `저장했습니다: ${target.name}`);
     $('saveName').textContent = target.name;
     say('Excel을 저장했습니다.');

@@ -1,4 +1,4 @@
-// 장비 출력 폴더를 1초마다 살펴 바뀐 CSV를 기기별로 묶는다. 첫 6개는 「반영」, 같은 기기 재측정은 「교체할까요?」, 다른 기기는 지금 기기를 저장한 뒤 넘어간다 (PR #22 · #23)
+// 장비 출력 폴더를 1초마다 살펴 기존·변경 CSV를 기기별로 묶는다. 첫 6개는 「반영」, 같은 기기 재측정은 「교체할까요?」, 다른 기기는 지금 기기를 저장한 뒤 넘어간다 (PR #22 · #23)
 import { planFolder, touchesCurrent } from '../core/batch.js';
 
 const $ = (id) => document.getElementById(id);
@@ -157,7 +157,7 @@ export function createFolderWatch({ analyze, load, isSaving, getFiles, getSlots,
       setText(
         folderStatus,
         ready
-          ? `새 검사 데이터 6개가 준비됐습니다. 반영을 누르면 결과를 갱신합니다. 파일: ${session.pending.names.join(', ')}${ignoredNote}`
+          ? `새 검사 데이터 6개가 준비됐습니다(${deviceText(waiting)}). 반영을 누르면 결과를 갱신합니다. 파일: ${session.pending.names.join(', ')}${ignoredNote}`
           : waiting?.ready
             ? `CSV 6개가 모였지만 검증을 통과하지 못했습니다. 넣은 파일을 확인하세요.${ignoredNote}`
             : `장비 폴더 감시 중 · 새로 저장되거나 변경된 CSV ${waiting ? waiting.count : 0}/6개${ignoredNote}`,
@@ -255,6 +255,14 @@ export function createFolderWatch({ analyze, load, isSaving, getFiles, getSlots,
         setText(folderStatus, '폴더를 읽을 수 없습니다. 폴더 접근 권한을 확인하고 다시 선택해 주세요.');
         return;
       }
+      // 장비가 쓰는 파일을 아직 읽을 수 없으면 현재 기기 것인지도 확인할 수 없다.
+      // 읽기 재시도 전까지 이전 결과를 그대로 저장하지 않도록 보류한다.
+      if (hasResult()) {
+        session.holding = true;
+        session.holdChecked = false;
+        onBlock(HOLD_TEXT);
+        showBanner('CSV를 아직 읽을 수 없어 다시 확인하고 있습니다. 확인이 끝날 때까지 저장을 잠시 막습니다.');
+      }
       session.stableSince = performance.now();
     }
     if (watchSession === session) session.timer = setTimeout(() => scanFolder(session), 1000);
@@ -264,10 +272,9 @@ export function createFolderWatch({ analyze, load, isSaving, getFiles, getSlots,
     folderStart.disabled = true;
     try {
       const directory = await window.showDirectoryPicker({ mode: 'read' });
-      const baseline = await readCsvFolder(directory);
       watchSession = {
         directory,
-        baseline,
+        baseline: new Map(), // 선택 전에 있던 CSV도 3초 안정화·검증 후 반영 후보로 보여 준다.
         incoming: new Map(),
         holding: false,
         holdChecked: false,
@@ -352,6 +359,16 @@ export function createFolderWatch({ analyze, load, isSaving, getFiles, getSlots,
   }
 
   return {
+    // 수동 선택·칸 재배정 뒤에는 이전 자동 반영 안내와 저장 완료 표식을 재사용하지 않는다.
+    notifyManualLoad() {
+      const session = watchSession;
+      if (!session) return;
+      session.note = '';
+      session.savedFiles = null;
+      session.autoNext = false;
+      if (session.plan) { replan(session); render(session); }
+      else setText(folderStatus, '장비 폴더 감시 중 · 수동으로 넣은 CSV를 확인했습니다.');
+    },
     // files: 저장을 시작할 때 화면에 있던 CSV. 저장하는 사이 화면이 바뀌었으면 「저장함」으로 치지 않는다
     notifySaved(files) {
       if (!watchSession || files !== getFiles()) return;
