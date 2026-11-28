@@ -95,3 +95,20 @@ test('수동 CSV 교체 후에는 이전 반영 완료 안내를 남기지 않�
   watcher.notifyManualLoad();
   await scan(); assert.doesNotMatch(element('csvFolderStatus').textContent, /반영했습니다|다음 기기 결과를 불러왔습니다/);
 });
+
+test('폴더의 대용량 CSV도 바이트를 읽기 전에 중지하고 기존 결과를 보존한다', async t => {
+  const { state, start, scan, element } = setup(t);
+  await start(); const current = state.current; let reads = 0;
+  state.disk.push({ name: 'SYNTH-large.csv', size: 26 * 1024 * 1024, lastModified: 2, arrayBuffer: async () => { reads++; return new Uint8Array(); } });
+  await scan();
+  assert.equal(reads, 0); assert.equal(state.current, current);
+  assert.equal(element('csvFolderStop').disabled, true);
+  assert.match(element('csvFolderStatus').textContent, /25 MB/);
+});
+test('폴더의 미처리 CSV 합계가 상한을 넘으면 바이트를 읽지 않는다', async t => {
+  const { state, start, scan, element } = setup(t);
+  await start(); let reads = 0;
+  state.disk.push(...Array.from({ length: 5 }, (_, i) => ({ name: `SYNTH-large-${i}.csv`, size: 21 * 1024 * 1024, lastModified: 2, arrayBuffer: async () => { reads++; return new Uint8Array(); } })));
+  await scan(); assert.equal(reads, 0);
+  assert.match(element('csvFolderStatus').textContent, /100 MB/);
+});

@@ -1,5 +1,6 @@
 // 장비 출력 폴더를 1초마다 살펴 기존·변경 CSV를 기기별로 묶는다. 첫 6개는 「반영」, 같은 기기 재측정은 「교체할까요?」, 다른 기기는 지금 기기를 저장한 뒤 넘어간다 (PR #22 · #23)
 import { planFolder, touchesCurrent } from '../core/batch.js';
+import { checkCsvSize, CsvSizeError } from './csvSelection.js';
 
 const $ = (id) => document.getElementById(id);
 const SLOT_NAMES = { rep_summary: '반복성 요약', rep_source: '반복성 source', lin_summary: '직선성 요약', lin_source: '직선성 source', sen_summary: '민감도 요약', sen_source: '민감도 source' };
@@ -12,7 +13,9 @@ async function readCsvFolder(directory) {
   for await (const [name, entry] of directory.entries()) {
     if (entry.kind === 'file' && /\.csv$/i.test(name)) {
       try {
-        files.set(name, await entry.getFile());
+        const file = await entry.getFile();
+        checkCsvSize(file);
+        files.set(name, file);
       } catch (error) {
         if (error.name !== 'NotFoundError') throw error;
       }
@@ -191,6 +194,7 @@ export function createFolderWatch({ analyze, load, isSaving, getFiles, getSlots,
       const files = await readCsvFolder(session.directory);
       if (watchSession !== session) return;
       const changed = changedFiles(session, files);
+      changed.reduce((sum, file) => checkCsvSize(file, sum), 0); // 이미 처리한 파일은 합계에서 제외한다.
       const signature = JSON.stringify(changed.map(fileStamp).sort());
       if (signature !== session.signature) {
         session.signature = signature;
@@ -252,7 +256,7 @@ export function createFolderWatch({ analyze, load, isSaving, getFiles, getSlots,
       if (watchSession !== session) return;
       if (!RETRY_ERRORS.includes(error.name)) {
         stopFolderWatch();
-        setText(folderStatus, '폴더를 읽을 수 없습니다. 폴더 접근 권한을 확인하고 다시 선택해 주세요.');
+        setText(folderStatus, error instanceof CsvSizeError ? `${error.message} 감시를 중지했습니다. 파일을 확인한 뒤 폴더를 다시 선택하세요.` : '폴더를 읽을 수 없습니다. 폴더 접근 권한을 확인하고 다시 선택해 주세요.');
         return;
       }
       // 장비가 쓰는 파일을 아직 읽을 수 없으면 현재 기기 것인지도 확인할 수 없다.
@@ -311,7 +315,7 @@ export function createFolderWatch({ analyze, load, isSaving, getFiles, getSlots,
     } catch (error) {
       if (!RETRY_ERRORS.includes(error.name)) {
         stopFolderWatch();
-        setText(folderStatus, '폴더를 읽을 수 없습니다. 접근 권한을 확인하고 다시 선택해 주세요.');
+        setText(folderStatus, error instanceof CsvSizeError ? `${error.message} 감시를 중지했습니다. 파일을 확인한 뒤 폴더를 다시 선택하세요.` : '폴더를 읽을 수 없습니다. 접근 권한을 확인하고 다시 선택해 주세요.');
         return;
       }
     } finally {
