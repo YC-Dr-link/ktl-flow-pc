@@ -260,6 +260,10 @@ async function save() {
   const { summaries } = state.analysis;
   const result = confirmedResult();
   const savingFiles = state.files; // 저장하는 사이 화면이 바뀌어도 「이 파일을 저장함」을 정확히 알리려고 잡아 둔다
+  const savingAnalysis = state.analysis;
+  // 저장 창이 열려 있거나 Excel을 만드는 사이 폴더에 새 CSV가 들어와 저장이 막혔거나 화면 결과가 바뀌었으면 쓰지 않는다 (PR #28 리뷰)
+  const stale = () => Boolean(watchBlock) || state.files !== savingFiles || state.analysis !== savingAnalysis;
+  const STALE_TEXT = '저장하는 사이 폴더에 새 CSV가 들어와 저장하지 않았습니다. 확인한 뒤 다시 저장하세요. 저장 창에서 만들어진 빈 파일이 있으면 지워도 됩니다.';
   const template = state.template.bytes;
   const values = optionalForm.values();
   excelSaving = true;
@@ -271,11 +275,21 @@ async function save() {
       types: [{ description: 'Excel 통합 문서', accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] } }],
       excludeAcceptAllOption: true,
     });
+    if (stale()) {
+      setMsg('blockedStale', 'err', STALE_TEXT);
+      say(STALE_TEXT);
+      return;
+    }
     setMsg('saving', '', 'Excel을 만드는 중입니다…');
     const t0 = performance.now();
     const { bytes } = await buildXlsx(template, result, summaries, values);
     document.body.dataset.excelMs = String(Math.round(performance.now() - t0)); // 성능 시험용 (화면에는 보이지 않음)
-    writer = await target.createWritable();
+    if (stale()) {
+      setMsg('blockedStale', 'err', STALE_TEXT);
+      say(STALE_TEXT);
+      return;
+    }
+    writer = await target.createWritable(); // TODO(확인 필요): Edge · Chrome에서 저장 창만 닫고 쓰지 않았을 때 빈 파일이 남는지
     await writer.write(bytes);
     await writer.close();
     writer = null;

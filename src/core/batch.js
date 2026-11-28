@@ -98,3 +98,15 @@ export function planFolder({ current, incoming, currentSlots = null }, config = 
     });
   return { replace, next, ignored, unchanged };
 }
+
+// 바뀐 파일 중 지금 기기 것이 있는지 (PR #28 리뷰). 3초 안정화를 기다리는 동안 저장을 보류할지 정한다.
+// 지금 기기와 열쇠가 같거나, 쓰는 중이라 머리글(접수번호 · 기기 번호)을 아직 못 읽는 파일이 있으면 true.
+// 다른 기기 파일만 있으면 false (다음 기기는 저장을 막지 않는다, #23 B안). 지금 결과 파일이 없으면 막을 것이 없으므로 false
+export function touchesCurrent(current, incoming, config = defaultConfig) {
+  const curKey = current.map((f) => describeFile(f, config)).find((d) => d.receipt_no && d.serial)?.key;
+  if (!curKey) return false;
+  return incoming.some((f) => {
+    const d = describeFile(f, config);
+    return !d.receipt_no || !d.serial || d.key === curKey;
+  });
+}
