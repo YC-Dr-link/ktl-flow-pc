@@ -91,8 +91,10 @@ function generalSheet(result, summaries, optional, config) {
     D12: result.overall === '적합' ? config.overallLabels.pass : config.overallLabels.fail,
     E21: rep.zero_pct,
     G21: rep.span_pct,
+    I21: rep.value_pct, // TODO(확인 필요): PM #7 임시 최종값 위치, 실제 CLAYDOX 매핑 Q14
     E30: lin.p30_pct,
     G30: lin.p70_pct,
+    I30: lin.value_pct, // TODO(확인 필요): 실제 CLAYDOX 매핑 Q14
     C35: sen.velocity_30,
     C39: sen.velocity_70,
   };
@@ -171,6 +173,8 @@ function sensitiveSheet(result, summaries) {
   // 그룹 값은 그룹 첫 행에 (J5, J8, …). 시트 행 = 데이터 행 + 4
   for (const g of result.sensitivity.by_angle) cells[`J${g.rows[0] + 4}`] = g.value_pct;
   cells.J36 = result.sensitivity.value_pct;
+  cells.AC1 = `${formatRounded(result.sensitivity.velocity_30, 2)} m/s`;
+  cells.AD1 = `${formatRounded(result.sensitivity.velocity_70, 2)} m/s`;
   return cells;
 }
 
@@ -191,7 +195,7 @@ export function cellValues(result, summaries, optional, config) {
 // 차트 갱신 값 (EXCEL_MAPPING 4절). 제목은 평균 유속 소수 둘째 자리, Y는 chartAngleOrder 순서 그룹 값
 export function chartValues(result, config) {
   const series = (point, velocity) => ({
-    title: formatRounded(velocity, 2),
+    title: `${formatRounded(velocity, 2)} m/s`,
     yValues: config.chartAngleOrder.map((angle) => result.sensitivity.by_angle.find((g) => g.angle === angle && g.point === point).value_pct),
   });
   return [series('30%', result.sensitivity.velocity_30), series('70%', result.sensitivity.velocity_70)];

@@ -2,8 +2,9 @@
 import JSZip from 'jszip';
 import defaultConfig from '../config.js';
 import { cellValues, chartValues } from './cellValues.js';
-import { parseXml, setCells, toXml } from './sheetXml.js';
+import { parseXml, setCells, toXml, splitRef } from './sheetXml.js';
 import { updateChart } from './chartXml.js';
+import { prepareProvenance, appendProvenance, sourceRawCells, rawLocation } from './provenance.js';
 
 const REL_NS_PATH = 'xl/_rels/workbook.xml.rels';
 
@@ -82,20 +83,42 @@ export async function checkTemplate(bytes, config = defaultConfig) {
 }
 
 // templateBytes: 양식 xlsx / result, summaries: analyze() 결과 / optional: 선택 입력 / 반환: { bytes, fileName }
-export async function buildXlsx(templateBytes, result, summaries, optional = {}, config = defaultConfig) {
+export async function buildXlsx(templateBytes, result, summaries, optional = {}, config = defaultConfig, source = null) {
   if (!result || !summaries) throw new Error('검증을 통과한 결과가 없어 Excel을 만들 수 없습니다.');
+  const provenance = source ? await prepareProvenance(source.files, source.analysis, result, source.confirmedAt) : null;
   const zip = await JSZip.loadAsync(templateBytes);
   const read = (path) => zip.file(path).async('string');
 
   const paths = sheetPaths(await read('xl/workbook.xml'), await read(REL_NS_PATH));
   const values = cellValues(result, summaries, optional, config);
+  if (provenance) {
+    for (const row of provenance.rows) {
+      if (['rep_summary', 'sen_summary'].includes(row.slot.id)) continue;
+      const { sheet } = rawLocation(row, config);
+      Object.assign(values[sheet], sourceRawCells(row));
+    }
+  }
   const sheetDocs = [];
   const docByPath = {};
   for (const name of config.sheetNames) {
     const path = paths[name];
     if (!path) throw new Error(`양식에 '${name}' 시트가 없습니다.`);
     const doc = parseXml(await read(path));
+    if (provenance && config.sheetNames.slice(4).includes(name)) {
+      const clear = Object.fromEntries([...doc.getElementsByTagName('c')]
+        .filter(cell => splitRef(cell.getAttribute('r')).col >= 13)
+        .map(cell => [cell.getAttribute('r'), null]));
+      setCells(doc, clear);
+    }
     setCells(doc, values[name]);
+    sheetDocs.push(doc);
+    docByPath[path] = doc;
+  }
+
+  // 양식에 추가 시트가 있어도 공유 문자열 번호가 깨지지 않도록 함께 추적한다.
+  for (const [name, path] of Object.entries(paths)) {
+    if (docByPath[path] || name === '출처') continue;
+    const doc = parseXml(await read(path));
     sheetDocs.push(doc);
     docByPath[path] = doc;
   }
@@ -110,10 +133,12 @@ export async function buildXlsx(templateBytes, result, summaries, optional = {},
   await Promise.all(
     chartValues(result, config).map(async (series, i) => {
       const path = `xl/charts/chart${i + 1}.xml`;
-      write(path, updateChart(await read(path), series));
+      const titleReference = `'${config.sheetNames[2].replaceAll("'", "''")}'!$${i === 0 ? 'AC' : 'AD'}$1`;
+      write(path, updateChart(await read(path), series, titleReference));
     }),
   );
 
+  if (provenance) await appendProvenance(zip, provenance, config);
   const bytes = await zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE', compressionOptions: { level: 6 } });
   return { bytes, fileName: outputFileName(result, config) };
 }
