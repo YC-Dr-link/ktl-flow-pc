@@ -82,6 +82,14 @@
       <span class="badge fill-bad" id="optionalBadge" hidden></span>
     </div>
     <p class="hint">비워 두면 제작회사·형식승인번호·형식승인일자·피토계수는 「-」로 들어가고, 나머지는 양식 그대로 둡니다. CLAYDOX에서 직접 넣어도 됩니다.</p>
+    <div class="row">
+      <label class="btn weak file-pick">
+        <input type="file" id="prevInput" accept=".xlsx,.xlsm" aria-describedby="prevStatus">
+        <span>작년 Excel에서 불러오기</span>
+      </label>
+      <span class="hint" id="prevStatus" role="status">같은 기기의 작년 성적서 Excel을 고르면 비어 있는 칸만 채웁니다.</span>
+    </div>
+    <p class="hint picked" id="optionalNotice" hidden></p>
     <form class="fields" id="optionalForm" autocomplete="off" novalidate></form>
     <div class="save-cells">
       <button type="button" class="btn weak" id="cellsBtnSave" data-modal="cells">CLAYDOX가 가져갈 주요 셀</button>

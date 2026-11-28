@@ -196,6 +196,9 @@ details.more > .hint { margin-bottom: var(--sp-md); }
 .field label { display: block; margin-bottom: var(--sp-xs); font-size: 14px; line-height: 21px; font-weight: 600; }
 .field input[aria-invalid="true"] { border: 2px solid var(--danger); padding: 0 calc(var(--sp-lg) - 1px); background-color: var(--danger-bg); }
 .err-text { min-height: 21px; margin: var(--sp-xs) 0 0; color: var(--danger); font-size: 14px; line-height: 21px; }
+.err-text.warn { padding-left: var(--sp-sm); border-left: 3px solid var(--warn-line); background: var(--warn-bg); color: var(--warn-ink); } /* 날짜 꼴 안내, 저장은 막지 않음 (#24) */
+.err-text.from { color: var(--body); } /* 작년 파일에서 불러옴 (#24) */
+.field .hint { margin-top: var(--sp-xs); }
 
 @media (max-width: 960px) {
   .equip-groups { grid-template-columns: minmax(0, 1fr); }

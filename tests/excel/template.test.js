@@ -84,3 +84,10 @@ describe('합성 CSV set_a → 합성 양식: 주요 칸 값 (NFR-02, 소수 셋
     near(book.sheets[names[2]].cell('J36'), e.sensitivity_pct, '민감도(sensitive J36)');
   });
 });
+
+describe('피토계수 (#24, #7)', () => {
+  it('쉼표 소수점(0,826)도 숫자 0.826으로 저장한다', async () => {
+    const book = await openXlsx((await buildXlsx(synthetic(), result, summaries, { pitotCoefficient: '0,826' })).bytes);
+    assert.equal(book.sheets[names[0]].cell('H11'), 0.826);
+  });
+});
