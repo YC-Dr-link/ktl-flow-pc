@@ -14,6 +14,7 @@ const DATE_KEYS = new Set(['approvalDate', 'firstInspectionDate', 'previousInspe
 // date1904: 통합 문서가 1904 날짜 체계(workbookPr date1904)면 0 = 1904-01-01 (PR #29 리뷰).
 // 1900 체계는 Excel이 1900-02-29(60)를 있는 날로 세므로 60 미만은 하루를 당기고, 60은 없는 날이라 빈칸
 export function excelDateText(serial, { date1904 = false } = {}) {
+  if (!Number.isFinite(serial) || serial < (date1904 ? 0 : 1) || serial > 2958465) return ''; // 빈 칸을 가리키는 수식의 0 · 음수 · 9999-12-31 넘는 값은 빈칸
   const day = Math.floor(serial);
   let base;
   if (date1904) base = Date.UTC(1904, 0, 1);
@@ -58,7 +59,7 @@ async function readGeneral(bytes, config) {
   const [workbook, rels] = await Promise.all([read('xl/workbook.xml'), read('xl/_rels/workbook.xml.rels')]);
   if (!workbook || !rels) throw fail('Excel 파일(.xlsx · .xlsm)이 아닙니다.');
   // 통합 문서의 날짜 체계 (workbookPr date1904="1" 또는 "true")
-  const pr = parseXml(workbook).getElementsByTagName('workbookPr')[0];
+  const pr = parseXml(workbook).getElementsByTagNameNS('*', 'workbookPr')[0]; // x: 같은 접두사가 붙어도 찾는다
   const date1904 = ['1', 'true'].includes(String(pr?.getAttribute('date1904') ?? '').toLowerCase());
   const general = config.sheetNames[0];
   const path = sheetPaths(workbook, rels)[general];

@@ -126,4 +126,19 @@ describe('Excel 날짜 체계 (PR #29 리뷰)', () => {
     const prev = await readPreviousGeneral(await zip.generateAsync({ type: 'uint8array' }));
     assert.equal(prev.values.approvalDate, '2027년 03월 16일');
   });
+
+  it('date1904 값(1 · true · 0 · false)과 위치(<sheets> 뒤)에 따라 날짜 체계를 고른다', async () => {
+    for (const [attr, after, want] of [['1', false, '2027년 03월 16일'], ['true', true, '2027년 03월 16일'], ['0', false, '2023년 03월 15일'], ['false', true, '2023년 03월 15일']]) {
+      const zip = await JSZip.loadAsync(await handMade('<c r="D8" t="s"><v>0</v></c><c r="D10"><v>45000</v></c>', ['<si><t>SYNTH-0001</t></si>']));
+      const wb = await zip.file('xl/workbook.xml').async('string');
+      const pr = `<workbookPr date1904="${attr}"/>`;
+      zip.file('xl/workbook.xml', after ? wb.replace('</sheets>', `</sheets>${pr}`) : wb.replace('<sheets>', `${pr}<sheets>`));
+      assert.equal((await readPreviousGeneral(await zip.generateAsync({ type: 'uint8array' }))).values.approvalDate, want, `${attr} ${after}`);
+    }
+  });
+
+  it('0 · 음수 · NaN · 너무 큰 날짜 숫자는 빈칸으로 본다', () => {
+    for (const v of [0, -1, NaN, Infinity, 1e9]) assert.equal(excelDateText(v), '', String(v));
+    assert.equal(excelDateText(-1, { date1904: true }), '');
+  });
 });

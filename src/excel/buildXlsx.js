@@ -10,10 +10,10 @@ const REL_NS_PATH = 'xl/_rels/workbook.xml.rels';
 // workbook.xml과 관계 파일로 시트 이름 → 파일 경로. Target이 '/xl/…'처럼 절대 경로인 파일도 있다
 export function sheetPaths(workbookXml, relsXml) {
   const rels = new Map(
-    [...parseXml(relsXml).getElementsByTagName('Relationship')].map((r) => [r.getAttribute('Id'), r.getAttribute('Target')]),
+    [...parseXml(relsXml).getElementsByTagNameNS('*', 'Relationship')].map((r) => [r.getAttribute('Id'), r.getAttribute('Target')]),
   );
   const out = {};
-  for (const s of [...parseXml(workbookXml).getElementsByTagName('sheet')]) {
+  for (const s of [...parseXml(workbookXml).getElementsByTagNameNS('*', 'sheet')]) { // 접두사(x:)가 붙은 파일도
     const target = rels.get(s.getAttribute('r:id')) ?? '';
     out[s.getAttribute('name')] = target.startsWith('/') ? target.slice(1) : `xl/${target}`;
   }

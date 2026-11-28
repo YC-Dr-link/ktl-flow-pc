@@ -43,3 +43,10 @@ test('있는 날짜만 받는다: 그달의 날 수 · 윤년 (PR #29 리뷰)', 
   assert.equal(isRealDate(2000, 2, 29), true); // 400으로 나누어지면 윤년
   assert.equal(isRealDate(1900, 2, 29), false); // 100으로 나누어지면 평년
 });
+
+test('CSV 교정일이 달력에 없는 날이면 그 뜻으로 알린다', () => {
+  const sample = loadSample('set_a');
+  const bad = replaceInLine(sample.rep_summary, 10, '11-02-2026', '11-31-2026');
+  const r = analyze(toList({ ...sample, rep_summary: bad }));
+  assert.ok(r.errors.some((e) => e.code === 'VALUE_INVALID' && e.row === 10 && /달력에 있는 날짜/.test(e.message)), JSON.stringify(r.errors));
+});
