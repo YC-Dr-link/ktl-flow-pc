@@ -57,6 +57,7 @@ export function createReceiptForm(box, onChange) {
     } else if (eq) {
       box.append(h('p', { class: 'hint' }, `CSV 1행: 「${eq.requester_raw}」`));
     }
+    if (eq) box.append(h('p', { class: 'hint device', id: 'rc-device' }, `저장할 기기: 기기 번호 ${eq.serial || '-'} · 모델 ${eq.model || '-'}`)); // 어느 기기를 저장하는지 (#23)
     box.append(
       h(
         'div',

@@ -264,3 +264,9 @@ html.modal-open { overflow: hidden; }
 @media (max-width: 600px) {
   .receipt-fields { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* 폴더 감시 띠 (#23): 재측정 교체 · 다음 기기 대기. 결과 · 저장 화면 모두에서 보인다. 저장 띠(#saveMsg, sticky)와 겹치지 않게 고정하지 않는다 */
+.watch-banner { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-md); padding: var(--sp-md) max(var(--sp-xl), calc((100vw - 1260px) / 2 + var(--sp-xl))); background: var(--weak-bg); border-bottom: 1px solid var(--line); color: var(--ink); font-size: 15px; line-height: 22.5px; font-weight: 600; }
+.watch-banner[hidden] { display: none; }
+.watch-banner span { flex: 1 1 320px; }
+.hint.device { color: var(--ink); font-size: 15px; line-height: 22.5px; font-weight: 600; margin-top: var(--sp-xs); } /* 저장할 기기 (#23) */

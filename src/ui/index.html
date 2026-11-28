@@ -18,6 +18,12 @@
   </div>
 </header>
 <p id="saveMsg" class="msg" role="status"></p>
+<div id="watchBanner" class="watch-banner" hidden>
+  <span id="watchText" role="status"></span>
+  <button type="button" class="btn weak" id="watchReplace" hidden>다시 저장된 CSV로 교체</button>
+  <button type="button" class="btn weak" id="watchKeep" hidden>지금 결과 그대로 두기</button>
+  <button type="button" class="btn weak" id="watchNext" hidden>저장하지 않고 다음 기기로</button>
+</div>
 <p id="status" class="sr-only" role="status" aria-live="polite"></p>
 
 <main id="main" tabindex="-1">
