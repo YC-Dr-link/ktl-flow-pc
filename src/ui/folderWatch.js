@@ -204,9 +204,9 @@ export function createFolderWatch({ analyze, load, isSaving, getFiles, getSlots,
       if (!changed.length) {
         if (session.pending || session.holding) clearPending(session);
         session.holding = false;
+        session.plannedStamps = new Set();
         setText(folderStatus, session.note || '장비 폴더 감시 중 · 새로 저장되거나 변경된 CSV 0/6개');
       } else if (!session.plan && performance.now() - session.stableSince >= STABLE_MS) {
-        session.holding = false; // 확인이 끝났다. 아래 render가 교체 묻기(막음) 또는 해제로 바꾼다
         const batch = await Promise.all(nonEmpty.map(async (file) => ({ name: file.name, bytes: new Uint8Array(await file.arrayBuffer()), lastModified: file.lastModified })));
         if (watchSession !== session) return;
         session.incoming = new Map(changed.map((f) => [f.name, f]));
@@ -214,19 +214,27 @@ export function createFolderWatch({ analyze, load, isSaving, getFiles, getSlots,
         session.batch = batch;
         replan(session);
         session.note = '';
-        render(session);
+        session.plannedStamps = new Set(changed.map(fileStamp)); // 계획에서 이미 판단한 파일 (다시 보류 판단에 넣지 않는다)
+        render(session); // 교체 묻기(막음) 또는 해제로 바꾼다
+        session.holding = false; // 확인이 끝났다
       } else if (session.plan) {
         render(session); // 저장 · 손으로 넣기 같은 화면 변화에 맞춰 띠를 다시 그린다
       } else {
         // 3초 안정화를 기다리는 동안: 지금 기기의 파일(또는 아직 머리글을 못 읽는 파일)이 있으면 확인이 끝날 때까지 저장을 보류한다
         if (!session.holdChecked) {
-          const peek = await Promise.all(changed.map(async (file) => ({ name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) })));
+          // 지난 계획에서 이미 판단한 파일(판별 못 함 · 빈 파일 · 기다리는 다음 기기)은 빼고, 이번에 새로 바뀐 파일만 본다
+          const fresh = changed.filter((f) => !session.plannedStamps.has(fileStamp(f)));
+          const peek = await Promise.all(fresh.map(async (file) => ({ name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) })));
           if (watchSession !== session) return;
           session.holdChecked = true;
+          const was = session.holding;
           session.holding = hasResult() && touchesCurrent(getFiles(), peek);
           if (session.holding) {
             onBlock(HOLD_TEXT);
-            if (!session.pending) showBanner('같은 기기의 새 CSV를 확인하는 중입니다. 확인이 끝날 때까지 저장을 잠시 막습니다.');
+            if (!session.pending) showBanner('확인 중인 CSV가 있습니다(같은 기기이거나 아직 다 써지지 않음). 확인이 끝날 때까지 저장을 잠시 막습니다.');
+          } else if (was && !['replace', 'replace-wait'].includes(session.pending?.kind)) {
+            onBlock(null); // 다시 보니 지금 기기 것이 아니다 (다 써진 다음 기기 파일 등)
+            showBanner('');
           }
         }
         setText(folderStatus, `장비 폴더 감시 중 · 새로 저장되거나 변경된 CSV ${changed.length}개 확인 중`);
@@ -263,6 +271,7 @@ export function createFolderWatch({ analyze, load, isSaving, getFiles, getSlots,
         incoming: new Map(),
         holding: false,
         holdChecked: false,
+        plannedStamps: new Set(),
         batch: [],
         empties: [],
         signature: '',

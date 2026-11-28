@@ -263,7 +263,11 @@ async function save() {
   const savingAnalysis = state.analysis;
   // 저장 창이 열려 있거나 Excel을 만드는 사이 폴더에 새 CSV가 들어와 저장이 막혔거나 화면 결과가 바뀌었으면 쓰지 않는다 (PR #28 리뷰)
   const stale = () => Boolean(watchBlock) || state.files !== savingFiles || state.analysis !== savingAnalysis;
-  const STALE_TEXT = '저장하는 사이 폴더에 새 CSV가 들어와 저장하지 않았습니다. 확인한 뒤 다시 저장하세요. 저장 창에서 만들어진 빈 파일이 있으면 지워도 됩니다.';
+  const STALE_TEXT = '저장하는 사이 폴더에 새 CSV가 들어와 저장하지 않았습니다. 확인한 뒤 다시 저장하세요. 저장 창에서 고른 자리에 열리지 않는 xlsx가 남았으면 지워도 됩니다.';
+  const staleStop = () => {
+    setMsg('blockedStale', 'err', STALE_TEXT);
+    say(STALE_TEXT);
+  };
   const template = state.template.bytes;
   const values = optionalForm.values();
   excelSaving = true;
@@ -275,25 +279,18 @@ async function save() {
       types: [{ description: 'Excel 통합 문서', accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] } }],
       excludeAcceptAllOption: true,
     });
-    if (stale()) {
-      setMsg('blockedStale', 'err', STALE_TEXT);
-      say(STALE_TEXT);
-      return;
-    }
+    if (stale()) return staleStop();
     setMsg('saving', '', 'Excel을 만드는 중입니다…');
     const t0 = performance.now();
     const { bytes } = await buildXlsx(template, result, summaries, values);
     document.body.dataset.excelMs = String(Math.round(performance.now() - t0)); // 성능 시험용 (화면에는 보이지 않음)
-    if (stale()) {
-      setMsg('blockedStale', 'err', STALE_TEXT);
-      say(STALE_TEXT);
-      return;
-    }
+    if (stale()) return staleStop();
     writer = await target.createWritable(); // TODO(확인 필요): Edge · Chrome에서 저장 창만 닫고 쓰지 않았을 때 빈 파일이 남는지
     await writer.write(bytes);
     await writer.close();
     writer = null;
-    setMsg('saved', 'ok', `저장했습니다: ${target.name}`);
+    // 쓰는 도중에 재측정 CSV가 확인됐으면(사용자가 이미 저장을 정한 뒤라 막지 않음) 그 사실을 덧붙인다
+    setMsg('saved', 'ok', `저장했습니다: ${target.name}${watchBlock ? ' · 그 사이 재측정 CSV가 들어왔습니다. 위 띠를 확인하세요.' : ''}`);
     $('saveName').textContent = target.name;
     say('Excel을 저장했습니다.');
     folderWatch.notifySaved(savingFiles); // 다음 기기가 기다리고 있으면 넘어간다 (#23 B안)
@@ -308,7 +305,7 @@ async function save() {
     excelSaving = false;
     syncSaveBtn();
     // 저장 중에 버튼이 꺼지면 초점이 사라지므로 되돌려 준다. 그 사이 사용자가 다른 곳으로 옮겼으면 빼앗지 않는다 (접근성 A4)
-    if (!$('saveBtn').disabled && document.activeElement === document.body) $('saveBtn').focus();
+    if (document.activeElement === document.body) focusAfter(); // 저장 버튼이 꺼져 있으면 본문으로
   }
 }
 
