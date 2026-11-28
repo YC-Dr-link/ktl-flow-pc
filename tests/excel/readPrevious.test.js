@@ -104,3 +104,26 @@ describe('readPreviousGeneral — 손으로 만든 양식', () => {
     assert.equal(excelDateText(41516.6), '2013년 08월 30일');
   });
 });
+
+describe('Excel 날짜 체계 (PR #29 리뷰)', () => {
+  it('1904 날짜 체계: 45000은 2027년 03월 16일, 1900 체계는 2023년 03월 15일', () => {
+    assert.equal(excelDateText(45000, { date1904: true }), '2027년 03월 16일');
+    assert.equal(excelDateText(0, { date1904: true }), '1904년 01월 01일');
+    assert.equal(excelDateText(45000), '2023년 03월 15일');
+  });
+
+  it('1900 체계의 60 미만은 Excel 윤년 버그를 따라 하루를 맞추고, 없는 1900-02-29(60)는 빈칸', () => {
+    assert.equal(excelDateText(1), '1900년 01월 01일');
+    assert.equal(excelDateText(59), '1900년 02월 28일');
+    assert.equal(excelDateText(60), '');
+    assert.equal(excelDateText(61), '1900년 03월 01일');
+  });
+
+  it('workbookPr date1904="1"인 파일의 날짜 숫자는 1904 체계로 읽는다', async () => {
+    const zip = await JSZip.loadAsync(await handMade('<c r="D8" t="s"><v>0</v></c><c r="D10"><v>45000</v></c>', ['<si><t>SYNTH-0001</t></si>']));
+    const wb = await zip.file('xl/workbook.xml').async('string');
+    zip.file('xl/workbook.xml', wb.replace('<sheets>', '<workbookPr date1904="1"/><sheets>'));
+    const prev = await readPreviousGeneral(await zip.generateAsync({ type: 'uint8array' }));
+    assert.equal(prev.values.approvalDate, '2027년 03월 16일');
+  });
+});

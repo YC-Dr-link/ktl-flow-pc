@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { formatTestDate } from '../../src/core/compute.js';
 import { analyze } from '../../src/core/analyze.js';
-import { parseDate } from '../../src/core/csv.js';
+import { isRealDate, parseDate } from '../../src/core/csv.js';
 import { loadSample, replaceInLine, toList } from '../helpers/fixture.js';
 
 test('연도가 앞에 오는 날짜', () => {
@@ -35,4 +35,11 @@ test('교정일이 날짜가 아니면 VALUE_INVALID로 막고 결과를 내지 
   const r = analyze(toList({ ...sample, rep_summary: bad }));
   assert.equal(r.result, null);
   assert.ok(r.errors.some((e) => e.code === 'VALUE_INVALID' && e.row === 10 && e.file === bad.name), JSON.stringify(r.errors));
+});
+
+test('있는 날짜만 받는다: 그달의 날 수 · 윤년 (PR #29 리뷰)', () => {
+  assert.deepEqual(parseDate('2024-02-29'), ['2024', '02', '29']); // 윤년
+  for (const bad of ['2025-02-29', '2026-02-31', '2026-04-31', '2026-13-01', '2026.99.99']) assert.equal(parseDate(bad), null, bad);
+  assert.equal(isRealDate(2000, 2, 29), true); // 400으로 나누어지면 윤년
+  assert.equal(isRealDate(1900, 2, 29), false); // 100으로 나누어지면 평년
 });

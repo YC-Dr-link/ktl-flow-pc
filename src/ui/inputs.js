@@ -1,6 +1,6 @@
 // CSV에 없는 일반사항 값을 받는 선택 입력 폼 (FR-M5-05). 키는 excel/cellValues.js의 선택 입력 키와 같다
 import { h, clear } from './dom.js';
-import { parseNumber } from '../core/csv.js';
+import { isRealDate, parseNumber } from '../core/csv.js';
 
 // date: 날짜 칸(꼴이 다르면 노란 안내, 저장은 막지 않음), hint: 칸 아래 늘 보이는 도움말 (#24)
 const FIELDS = [
@@ -26,8 +26,21 @@ export const eunNeun = (name) => {
 };
 
 // 날짜 칸이 받는 꼴: 「YYYY년 MM월 DD일」 또는 「YYYY.MM.DD」(월 · 일 두 자리). TODO(확인 필요): 양식 칸마다 어느 꼴인지 (Q13)
-export const isDateText = (v) => /^\d{4}년 \d{2}월 \d{2}일$/.test(v) || /^\d{4}\.\d{2}\.\d{2}$/.test(v);
+const DATE_FORMS = [/^(\d{4})년 (\d{2})월 (\d{2})일$/, /^(\d{4})\.(\d{2})\.(\d{2})$/];
+const dateParts = (v) => DATE_FORMS.map((re) => re.exec(v)).find(Boolean);
+// 꼴이 맞고 달력에 있는 날짜인지 (2026.02.31 · 2025.02.29는 false, PR #29 리뷰)
+export const isDateText = (v) => {
+  const m = dateParts(v);
+  return Boolean(m) && isRealDate(Number(m[1]), Number(m[2]), Number(m[3]));
+};
 const DATE_HELP = '날짜는 2025년 10월 17일 또는 2025.10.17처럼 넣으세요. 맞으면 그대로 저장해도 됩니다.';
+const DATE_NOT_REAL = '있는 날짜가 아닙니다(예: 2월 31일). 날짜를 확인하세요. 맞으면 그대로 저장해도 됩니다.';
+// 날짜 칸 안내 문구: 꼴이 다름 / 꼴은 맞는데 없는 날 / 괜찮음('')
+export const dateWarning = (value) => {
+  const v = String(value).trim();
+  if (!v || isDateText(v)) return '';
+  return dateParts(v) ? DATE_NOT_REAL : DATE_HELP;
+};
 const FROM_LAST_YEAR = '작년 파일에서 불러옴';
 
 // 클라이언트 검증: 숫자 칸만 확인한다(저장을 막음). 반환: 오류 문구 | ''
@@ -37,7 +50,7 @@ function check(field, value) {
   return '';
 }
 // 날짜 꼴 안내: 저장은 막지 않는다 (#24)
-const warnOf = (field, value) => (field.date && value.trim() && !isDateText(value.trim()) ? DATE_HELP : '');
+const warnOf = (field, value) => (field.date ? dateWarning(value) : '');
 
 // form: <form> 요소 / onChange(): 값이 바뀔 때 부름. 반환: { values, valid, invalidCount, reset, fill, hasValues }
 export function createOptionalForm(form, onChange) {
