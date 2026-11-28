@@ -5,6 +5,10 @@ import { classifyFile } from './classify.js';
 import { SLOTS } from './assign.js';
 import { splitRequester } from './receipt.js';
 
+const known = (d) => Boolean(d.receipt_no && d.serial);
+// 지금 화면 파일 설명들 중 「지금 기기」 열쇠: 칸이 정해지고 접수번호 · 기기 번호를 아는 첫 파일 (planFolder · touchesCurrent가 같이 쓴다)
+const currentKeyOf = (descs) => descs.find((d) => d.slot && known(d))?.key ?? null;
+
 const sameBytes = (a, b) => Boolean(a && b) && a.length === b.length && a.every((v, i) => v === b[i]);
 
 // 파일 하나: 칸 id(판별 못 하면 null), 기기 열쇠, 교정 시간
@@ -26,13 +30,12 @@ export function describeFile(f, config = defaultConfig) {
 export function planFolder({ current, incoming, currentSlots = null }, config = defaultConfig) {
   // 접수번호나 기기 번호를 읽지 못하면 같은 기기인지 알 수 없으므로 지금 기기와 묶지 않는다
   // TODO(확인 필요): 실제 CSV에서 5행 기기 번호가 비는 경우가 있는지
-  const known = (d) => Boolean(d.receipt_no && d.serial);
   const slotOfIndex = currentSlots ? new Map(Object.entries(currentSlots).map(([slot, i]) => [i, slot])) : null;
   const cur = current.map((f, i) => {
     const d = describeFile(f, config);
     return { f, d: slotOfIndex ? { ...d, slot: slotOfIndex.get(i) ?? null } : d };
   });
-  const curKey = cur.find((c) => c.d.slot && known(c.d))?.d.key ?? null;
+  const curKey = currentKeyOf(cur.map((c) => c.d));
   const ignored = [];
   const groups = new Map(); // 열쇠 → { receipt_no, serial, unknown, first, bySlot: Map(칸 → { f, d }), superseded: [] }
   for (const f of incoming) {
@@ -97,4 +100,16 @@ export function planFolder({ current, incoming, currentSlots = null }, config = 
       };
     });
   return { replace, next, ignored, unchanged };
+}
+
+// 바뀐 파일 중 지금 기기 것이 있는지 (PR #28 리뷰). 3초 안정화를 기다리는 동안 저장을 보류할지 정한다.
+// 지금 기기와 열쇠가 같거나, 쓰는 중이라 머리글(접수번호 · 기기 번호)을 아직 못 읽는 파일이 있으면 true.
+// 다른 기기 파일만 있으면 false (다음 기기는 저장을 막지 않는다, #23 B안). 지금 결과 파일이 없으면 막을 것이 없으므로 false
+export function touchesCurrent(current, incoming, config = defaultConfig) {
+  const curKey = currentKeyOf(current.map((f) => describeFile(f, config)));
+  if (!curKey) return false;
+  return incoming.some((f) => {
+    const d = describeFile(f, config);
+    return !known(d) || d.key === curKey;
+  });
 }

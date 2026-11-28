@@ -1,7 +1,7 @@
 // 폴더 감시에서 바뀐 CSV를 기기별로 묶고, 같은 기기 일부 재측정(교체)과 다음 기기를 가려내는지 본다 (#23)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { describeFile, planFolder } from '../../src/core/batch.js';
+import { describeFile, planFolder, touchesCurrent } from '../../src/core/batch.js';
 import { SERIAL, SLOT_IDS, loadSample, replaceInLine, toList } from '../helpers/fixture.js';
 
 const sample = loadSample('set_a');
@@ -109,4 +109,13 @@ test('currentSlots를 주면 사람이 직접 고른 칸 배정을 쓴다 (자�
   const plan = planFolder({ current: shuffled, incoming: [stamp(retimed(sample.rep_summary), 'rep2.csv')], currentSlots });
   assert.equal(plan.replace.batch.length, 6);
   assert.deepEqual([plan.replace.serial, plan.replace.batch[0].name], [SERIAL, 'rep2.csv']);
+});
+
+test('touchesCurrent: 같은 기기 파일이나 열쇠를 못 읽는 파일이 있으면 true, 다른 기기만 있으면 false (#28 리뷰)', () => {
+  assert.equal(touchesCurrent(current, [stamp(retimed(sample.rep_summary), 'rep2.csv')]), true);
+  assert.equal(touchesCurrent(current, current.map((f) => stamp(otherDevice(f), `b-${f.name}`))), false);
+  const half = { name: 'writing.csv', bytes: sample.rep_summary.bytes.slice(0, 20), lastModified: 1 }; // 머리글이 덜 써짐
+  assert.equal(touchesCurrent(current, [half]), true);
+  assert.equal(touchesCurrent(current, [{ name: 'empty.csv', bytes: new Uint8Array(0), lastModified: 1 }]), true);
+  assert.equal(touchesCurrent([], [stamp(retimed(sample.rep_summary), 'rep2.csv')]), false); // 지금 결과가 없으면 막을 것이 없다
 });
