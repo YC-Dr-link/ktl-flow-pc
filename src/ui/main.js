@@ -14,6 +14,7 @@ import { createFolderWatch, focusAfter } from './folderWatch.js';
 import { createReceiptForm } from './receiptForm.js';
 import { WORKBOOK_LIMITS } from '../excel/workbookSafety.js';
 import { createLatestSelection } from './latestSelection.js';
+import { writeSnapshot } from './saveSnapshot.js';
 
 const $ = (id) => document.getElementById(id);
 const fromBase64 = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
@@ -356,7 +357,6 @@ async function save() {
   const values = optionalForm.values();
   excelSaving = true;
   syncSaveBtn();
-  let writer;
   try {
     const target = await window.showSaveFilePicker({
       suggestedName: safeDownloadName(outputFileName(result)), // 접수번호_유속계.xlsx. 길이 상한·방향 제어 문자 제거 (보안 L2)
@@ -368,18 +368,12 @@ async function save() {
     const t0 = performance.now();
     const { bytes } = await buildXlsx(template, result, summaries, values, undefined, source);
     document.body.dataset.excelMs = String(Math.round(performance.now() - t0)); // 성능 시험용 (화면에는 보이지 않음)
-    if (stale()) return staleStop();
-    writer = await target.createWritable(); // TODO(확인 필요): Edge · Chrome에서 저장 창만 닫고 쓰지 않았을 때 빈 파일이 남는지
-    await writer.write(bytes);
-    await writer.close();
-    writer = null;
-    // 쓰는 도중에 재측정 CSV가 확인됐으면(사용자가 이미 저장을 정한 뒤라 막지 않음) 그 사실을 덧붙인다
-    setMsg('saved', 'ok', `저장했습니다: ${target.name}${watchBlock ? ' · 그 사이 재측정 CSV가 들어왔습니다. 위 띠를 확인하세요.' : ''}`);
+    if (!(await writeSnapshot(target, bytes, () => !stale()))) return staleStop();
+    setMsg('saved', 'ok', `저장했습니다: ${target.name}`);
     $('saveName').textContent = target.name;
     say('Excel을 저장했습니다.');
     folderWatch.notifySaved(savingFiles); // 다음 기기가 기다리고 있으면 넘어간다 (#23 B안)
   } catch (error) {
-    if (writer) await writer.abort().catch(() => {});
     if (error.name === 'AbortError') setMsg('cancelled', '', 'Excel 저장을 취소했습니다.');
     else {
       console.error(error); // 원문은 개발자 도구에만 남긴다 (라이브러리 오류는 영문일 수 있음)

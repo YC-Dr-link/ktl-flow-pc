@@ -7,6 +7,10 @@ import { validate } from './validate.js';
 import { compute } from './compute.js';
 import { checkConfig } from './configCheck.js';
 
+const finiteNumbers = value => typeof value === 'number'
+  ? Number.isFinite(value)
+  : !value || typeof value !== 'object' || Object.values(value).every(finiteNumbers);
+
 // files: [{ name, bytes: Uint8Array }]
 // options: { config, assignment: { 칸id: 파일 번호 | null } } (assignment는 사용자가 직접 고른 칸만)
 // 반환: { files, slots, notices, errors, warnings, result, summaries }
@@ -32,7 +36,9 @@ export function analyze(files, options = {}) {
     const summaryOf = (test) => items[slots[SLOTS.find((s) => s.test === test && s.format === 'summary').id]].file;
     const found = { repeatability: summaryOf('repeatability'), linearity: summaryOf('linearity'), sensitivity: summaryOf('sensitivity') };
     try {
-      result = compute(found, config);
+      const computed = compute(found, config);
+      if (!finiteNumbers(computed)) throw new RangeError('계산값이 숫자 범위를 벗어났습니다. CSV에 지나치게 큰 값이 없는지 확인하세요.');
+      result = computed;
       summaries = found;
     } catch (e) {
       // 검증을 통과했는데도 계산이 실패하면 예외로 끝내지 않고 오류로 돌려준다 (결과 없음)

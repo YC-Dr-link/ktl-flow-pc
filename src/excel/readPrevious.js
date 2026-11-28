@@ -14,8 +14,8 @@ const DATE_KEYS = new Set(['approvalDate', 'firstInspectionDate', 'previousInspe
 // date1904: 통합 문서가 1904 날짜 체계(workbookPr date1904)면 0 = 1904-01-01 (PR #29 리뷰).
 // 1900 체계는 Excel이 1900-02-29(60)를 있는 날로 세므로 60 미만은 하루를 당기고, 60은 없는 날이라 빈칸
 export function excelDateText(serial, { date1904 = false } = {}) {
-  if (!Number.isFinite(serial) || serial < (date1904 ? 0 : 1) || serial > 2958465) return ''; // 빈 칸을 가리키는 수식의 0 · 음수 · 9999-12-31 넘는 값은 빈칸
   const day = Math.floor(serial);
+  if (!Number.isFinite(serial) || serial < (date1904 ? 0 : 1) || day > (date1904 ? 2957003 : 2958465)) return ''; // 날짜 체계별 9999-12-31 상한. 시각은 버린다
   let base;
   if (date1904) base = Date.UTC(1904, 0, 1);
   else if (day === 60) return '';
