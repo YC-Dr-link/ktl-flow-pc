@@ -53,7 +53,7 @@ async function readGeneral(bytes, config) {
   try {
     zip = await loadWorkbook(bytes, { output: false });
   } catch (error) {
-    if (error.message.startsWith('Excel 양식을 사용할 수 없습니다.')) throw fail(error.message);
+    if (error.message.startsWith('Excel 양식을 사용할 수 없습니다.')) throw fail(error.message.replace(/^Excel 양식을/, '작년 파일을'));
     throw fail('Excel 파일(.xlsx · .xlsm)이 아닙니다.');
   }
   const read = (p) => zip.file(p)?.async('string');

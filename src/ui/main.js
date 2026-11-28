@@ -16,6 +16,7 @@ import { createLatestSelection } from './latestSelection.js';
 import { writeSnapshot } from './saveSnapshot.js';
 import { createPreviousImport } from './previousImport.js';
 import { createUnsavedResult } from './unsavedResult.js';
+import { readCsvSelection } from './csvSelection.js';
 
 const $ = (id) => document.getElementById(id);
 const fromBase64 = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
@@ -115,6 +116,12 @@ function syncTemplate(error = '') {
   $('templateStatus').classList.toggle('bad', Boolean(error));
   $('templateStatus').classList.toggle('picked', !error && Boolean(state.template));
   $('templatePickText').textContent = state.template ? '다른 양식 고르기' : '양식 파일 고르기';
+  syncForgetBtn();
+}
+function syncForgetBtn() {
+  let cached = false;
+  try { cached = Boolean(localStorage.getItem(TEMPLATE_KEY)); } catch { /* 저장소를 쓸 수 없는 PC도 허용한다. */ }
+  $('forgetTemplate').disabled = excelSaving || (!state.template && !cached && !templateSelection.pending);
 }
 // 지난번에 고른 양식을 이 PC의 브라우저 저장소에서 되살린다
 async function restoreTemplate() {
@@ -159,7 +166,8 @@ function syncSaveBtn() {
   $('saveBtn').textContent = screen === 'save' ? 'Excel 저장' : 'Excel 만들고 저장';
   $('saveBtn').disabled = excelSaving || readingSelection() || Boolean(watchBlock) || (screen === 'save' ? !inputsValid() : !state.analysis?.result);
   // 저장 시작 때 확인한 값과 실제 출력이 달라지지 않도록 확정 중에는 입력을 잠근다.
-  for (const input of document.querySelectorAll('#optionalForm input, #receiptBox input, #prevInput, #templateInput, #fileInput, #forgetTemplate, #backBtn')) input.disabled = excelSaving;
+  for (const input of document.querySelectorAll('#optionalForm input, #receiptBox input, #prevInput, #templateInput, #fileInput, #backBtn')) input.disabled = excelSaving;
+  syncForgetBtn();
 }
 // 상태 낭독. 같은 문구를 연달아 써도 다시 읽히도록 먼저 비우고 잠시 뒤에 쓴다 (스크린리더는 내용이 바뀌어야 읽는다)
 let sayTimer = 0;
@@ -274,17 +282,10 @@ async function onFiles(fileList) {
   if (savedResult.needsConfirmation(state.files, state.analysis, inputSnapshot()) &&
       !window.confirm('현재 결과를 아직 저장하지 않았습니다. 새 CSV로 바꾸면 현재 결과와 접수 확인 내용이 바뀝니다. 교체할까요?')) return;
   previousImport.cancel();
-  await csvSelection.run(async () => {
-    if (picked.length > 6 || picked.some(f => f.size > WORKBOOK_LIMITS.compressed)) {
-      throw new Error('CSV는 한 검사분 6개까지, 파일당 25 MB 이하로 선택하세요.');
-    }
-    return Promise.all(picked.map(async (f) => ({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) })));
-  }, files => {
+  await csvSelection.run(() => readCsvSelection(picked), files => {
     load(files);
     folderWatch.notifyManualLoad();
   }, error => {
-    load([]);
-    folderWatch.notifyManualLoad();
     setMsg('failed', 'err', error instanceof DOMException ? 'CSV를 읽지 못했습니다. 접근 권한을 확인하고 다시 선택하세요.' : error.message);
   });
 }

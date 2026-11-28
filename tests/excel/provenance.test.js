@@ -65,6 +65,20 @@ test('확인한 뒤 입력 바이트나 계산 결과가 바뀌면 출처 생성
   await assert.rejects(prepareProvenance(files, analysis, wrong), /다릅니다/);
 });
 
+test('추가 후보 7개 중 사용한 6개만 출처·원본에 기록한다', async () => {
+  for (const manual of [false, true]) {
+    const selected = toList(loadSample());
+    selected.push(manual ? { ...selected[0], name: 'SYNTH-selected-seventh.csv' } : { name: 'SYNTH-ignored.csv', bytes: new TextEncoder().encode('SYNTH ignored') });
+    const analysis = analyze(selected, manual ? { assignment: { rep_summary: 6 } } : {});
+    assert.ok(analysis.result);
+    const { bytes } = await buildXlsx(template, analysis.result, analysis.summaries, {}, config, { files: selected, analysis, confirmedAt: stamp });
+    const book = await openXlsx(bytes), provenance = book.sheets['출처'];
+    assert.equal(provenance.cell('A2'), manual ? selected[6].name : selected[0].name);
+    assert.equal(provenance.cell('A8'), null);
+    assert.equal(provenance.cell('B2'), createHash('sha256').update(selected[manual ? 6 : 0].bytes).digest('hex'));
+  }
+});
+
 test('접두사가 있는 workbook·관계 XML에서도 출처를 만들고 재사용한다', async () => {
   const zip = await JSZip.loadAsync(template);
   for (const [part, prefix, names, ns] of [

@@ -52,6 +52,7 @@ test('입력과 해제 용량 상한 및 XML 엔티티를 검사한다', async (
   await assert.rejects(checkTemplate(large), /너무 큽니다/);
   const entity = await altered(zip => zip.file('xl/audit.xml', '<!DOCTYPE x [<!ENTITY y "SYNTH">]><x/>'));
   await assert.rejects(checkTemplate(entity), /XML 선언/);
+  await assert.rejects(readPreviousGeneral(entity), /작년 파일을 사용할 수 없습니다/);
 });
 
 test('다른 경로에 넣은 Excel 4 매크로도 관계·콘텐츠 형식으로 거부한다', async () => {

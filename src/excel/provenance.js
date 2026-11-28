@@ -9,10 +9,10 @@ const REL_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationsh
 const RAW_COLUMNS = { rep_summary: 'A', rep_source: 'M', lin_summary: 'X', lin_source: 'AJ', sen_summary: 'A', sen_source: 'M' };
 
 export async function prepareProvenance(files, analysis, result, confirmedAt = new Date().toISOString()) {
-  if (files.length !== 6 || !analysis?.result) throw new Error('출처를 기록하려면 검증된 CSV 6개가 필요합니다.');
+  if (files.length < 6 || !analysis?.result) throw new Error('출처를 기록하려면 검증된 CSV 6개가 필요합니다.');
   if (!Number.isFinite(Date.parse(confirmedAt))) throw new Error('출처 확인 시각이 올바르지 않습니다.');
   const slots = Object.values(analysis.slots);
-  if (new Set(slots.map(s => s.fileIndex)).size !== 6 || slots.some(s => !files[s.fileIndex])) {
+  if (slots.length !== 6 || new Set(slots.map(s => s.fileIndex)).size !== 6 || slots.some(s => !files[s.fileIndex])) {
     throw new Error('출처의 CSV 칸 배정이 올바르지 않습니다.');
   }
   // 호출 후 원본 배열이 바뀌어도 해시·raw 데이터·판별 정보는 같은 스냅샷을 사용한다.
