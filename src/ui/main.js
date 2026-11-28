@@ -1,7 +1,6 @@
 // 한 화면 작업대(왼쪽 넣은 파일, 오른쪽 결과)를 묶는 화면 진입점. 판별·검증·계산은 core의 analyze, Excel은 excel의 buildXlsx를 부르기만 한다
 import { analyze } from '../core/analyze.js';
 import { buildXlsx, checkTemplate, outputFileName } from '../excel/buildXlsx.js';
-import { readPreviousGeneral } from '../excel/readPrevious.js';
 import { h, clear } from './dom.js';
 import { renderSlots, resetSlotState } from './slots.js';
 import { renderResult, renderGraphEnv, renderUsedRows } from './results.js';
@@ -12,6 +11,12 @@ import { noticeList } from './noticeList.js';
 import { safeDownloadName } from './fileName.js';
 import { createFolderWatch, focusAfter } from './folderWatch.js';
 import { createReceiptForm } from './receiptForm.js';
+import { WORKBOOK_LIMITS } from '../excel/workbookSafety.js';
+import { createLatestSelection } from './latestSelection.js';
+import { writeSnapshot } from './saveSnapshot.js';
+import { createPreviousImport } from './previousImport.js';
+import { createUnsavedResult } from './unsavedResult.js';
+import { readCsvSelection } from './csvSelection.js';
 
 const $ = (id) => document.getElementById(id);
 const fromBase64 = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
@@ -27,6 +32,10 @@ const state = {
 
 let excelSaving = false; // 저장 위치를 고르고 파일을 쓰는 동안 true. 그동안 저장 버튼과 폴더 「반영」을 막는다
 let watchBlock = null; // 폴더 감시가 저장을 막는 이유 (재측정 CSV 교체를 묻는 동안, #23). 없으면 null
+const csvSelection = createLatestSelection(syncSelection);
+const templateSelection = createLatestSelection(syncSelection);
+const readingSelection = () => csvSelection.pending || templateSelection.pending || previousImport.pending;
+function syncSelection() { syncSaveBtn(); syncSaveBlock(); }
 
 function onInputChange() {
   syncSaveBtn();
@@ -35,7 +44,20 @@ function onInputChange() {
 }
 const optionalForm = createOptionalForm($('optionalForm'), onInputChange);
 const receiptForm = createReceiptForm($('receiptBox'), onInputChange); // 접수번호 · 회사명 확인 (#23)
+const previousImport = createPreviousImport({
+  onPendingChange: syncSelection,
+  currentSerial: () => state.analysis?.result?.equipment.serial,
+  isBusy: () => excelSaving || csvSelection.pending,
+  fill: values => optionalForm.fill(values),
+  onApplied: serial => { formSerial = serial; $('optionalNotice').hidden = true; },
+  show: (text, bad = false) => {
+    $('prevStatus').textContent = text;
+    $('prevStatus').classList.toggle('bad', bad);
+  },
+});
 const inputsValid = () => receiptForm.valid() && optionalForm.valid();
+const savedResult = createUnsavedResult();
+const inputSnapshot = () => JSON.stringify({ receipt: receiptForm.values(), optional: optionalForm.values() });
 
 // 저장 화면에서 사람이 확인한 접수번호 · 회사명을 넣은 결과. Excel(D2 · D3 · 시트별 B1)과 파일 이름은 이 값을 쓴다
 const confirmedResult = () => {
@@ -67,9 +89,14 @@ function goToInvalid(e) {
 }
 function syncSaveBlock() {
   const msg = $('saveMsg');
-  const blocked = ['blocked', 'blockedReceipt', 'blockedWatch'].includes(msg.dataset.state);
+  const blocked = ['blocked', 'blockedReceipt', 'blockedWatch', 'readingSelection'].includes(msg.dataset.state);
   const link = () => h('a', { href: '#saveScreen', onClick: goToInvalid }, '고칠 칸으로');
-  if (watchBlock && state.analysis?.result) {
+  if (readingSelection()) {
+    const text = csvSelection.pending ? '선택한 CSV를 읽고 있습니다. 확인이 끝나면 저장할 수 있습니다.'
+      : templateSelection.pending ? '선택한 양식을 확인하고 있습니다. 확인이 끝나면 저장할 수 있습니다.'
+        : '작년 Excel을 읽고 있습니다. 확인이 끝나면 저장할 수 있습니다.';
+    if (msg.dataset.state !== 'readingSelection' || msg.textContent !== text) setMsg('readingSelection', '', text);
+  } else if (watchBlock && state.analysis?.result) {
     if (msg.dataset.state !== 'blockedWatch' || msg.textContent !== watchBlock) setMsg('blockedWatch', 'err', watchBlock);
   } else if (state.screen === 'save' && !receiptForm.valid()) {
     if (msg.dataset.state !== 'blockedReceipt') setMsg('blockedReceipt', 'err', `${RECEIPT_BLOCKED} `, link());
@@ -89,45 +116,58 @@ function syncTemplate(error = '') {
   $('templateStatus').classList.toggle('bad', Boolean(error));
   $('templateStatus').classList.toggle('picked', !error && Boolean(state.template));
   $('templatePickText').textContent = state.template ? '다른 양식 고르기' : '양식 파일 고르기';
+  syncForgetBtn();
+}
+function syncForgetBtn() {
+  let cached = false;
+  try { cached = Boolean(localStorage.getItem(TEMPLATE_KEY)); } catch { /* 저장소를 쓸 수 없는 PC도 허용한다. */ }
+  $('forgetTemplate').disabled = excelSaving || (!state.template && !cached && !templateSelection.pending);
 }
 // 지난번에 고른 양식을 이 PC의 브라우저 저장소에서 되살린다
 async function restoreTemplate() {
-  try {
+  await templateSelection.run(async () => {
     const saved = JSON.parse(localStorage.getItem(TEMPLATE_KEY));
-    if (saved) {
-      const bytes = fromBase64(saved.base64);
-      await checkTemplate(bytes);
-      state.template = { name: String(saved.name), bytes };
-    }
-  } catch {
+    if (!saved) return null;
+    const bytes = fromBase64(saved.base64);
+    await checkTemplate(bytes);
+    return { name: String(saved.name), bytes };
+  }, template => {
+    if (template) state.template = template;
+    syncTemplate();
+  }, () => {
     // 저장소를 쓸 수 없거나 값이 깨졌으면 기억 없이 매번 고르게 둔다
-  }
-  syncTemplate();
+    syncTemplate();
+  });
 }
 async function onTemplate(file) {
-  if (!file) return;
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  try {
+  if (!file || excelSaving) return;
+  await templateSelection.run(async () => {
+    if (file.size > WORKBOOK_LIMITS.compressed) throw new Error('양식 파일은 25 MB 이하여야 합니다.');
+    const bytes = new Uint8Array(await file.arrayBuffer());
     await checkTemplate(bytes);
-  } catch (e) {
-    syncTemplate(e.message); // checkTemplate의 오류는 화면에 보여 줄 한국어 문구다
-    return;
-  }
-  state.template = { name: file.name, bytes };
-  try {
-    localStorage.setItem(TEMPLATE_KEY, JSON.stringify({ name: file.name, base64: toBase64(bytes) }));
-  } catch {
-    // 저장소가 막혀 있으면 이번 실행에서만 쓴다
-  }
-  syncTemplate();
-  if ($('saveMsg').dataset.state === 'needTemplate') setMsg('', '');
+    return { name: file.name, bytes };
+  }, template => {
+    state.template = template;
+    try {
+      localStorage.setItem(TEMPLATE_KEY, JSON.stringify({ name: template.name, base64: toBase64(template.bytes) }));
+    } catch {
+      // 저장소가 막혀 있으면 이번 실행에서만 쓴다
+    }
+    syncTemplate();
+    if ($('saveMsg').dataset.state === 'needTemplate') setMsg('', '');
+  }, e => {
+    syncTemplate(e instanceof DOMException ? '양식 파일을 읽지 못했습니다. 접근 권한을 확인하고 다시 선택하세요.' : e.message);
+  });
 }
 
 // 위 줄의 주 버튼. 결과 화면에서는 「Excel 만들고 저장」(저장 화면으로 감), 저장 화면에서는 「Excel 저장」(저장 위치를 고르고 씀)
 function syncSaveBtn() {
   const { screen } = state;
   $('saveBtn').textContent = screen === 'save' ? 'Excel 저장' : 'Excel 만들고 저장';
-  $('saveBtn').disabled = excelSaving || Boolean(watchBlock) || (screen === 'save' ? !inputsValid() : !state.analysis?.result); // 저장 화면에서는 입력 오류가 있을 때만 꺼진다
+  $('saveBtn').disabled = excelSaving || readingSelection() || Boolean(watchBlock) || (screen === 'save' ? !inputsValid() : !state.analysis?.result);
+  // 저장 시작 때 확인한 값과 실제 출력이 달라지지 않도록 확정 중에는 입력을 잠근다.
+  for (const input of document.querySelectorAll('#optionalForm input, #receiptBox input, #prevInput, #templateInput, #fileInput, #backBtn')) input.disabled = excelSaving;
+  syncForgetBtn();
 }
 // 상태 낭독. 같은 문구를 연달아 써도 다시 읽히도록 먼저 비우고 잠시 뒤에 쓴다 (스크린리더는 내용이 바뀌어야 읽는다)
 let sayTimer = 0;
@@ -182,9 +222,11 @@ function refresh({ keepReceipt = false } = {}) {
 }
 
 function onPick(slotId, fileIndex) {
+  previousImport.cancel();
   state.assignment = { ...state.assignment, [slotId]: fileIndex };
   const ok = refresh({ keepReceipt: true });
   const cleared = syncFormDevice(); // 칸을 직접 골라 다른 기기 결과가 나온 경우도 비운다 (#24)
+  folderWatch.notifyManualLoad();
   say(`${ok ? announce() : `오류 ${state.analysis.errors.length}건이 있습니다. 오류 내용을 확인하세요.`}${cleared ? ` ${cleared}` : ''}`);
 }
 
@@ -219,6 +261,8 @@ function syncFormDevice() {
 }
 // 반환: 낭독한 문장 (폴더 감시가 자기 안내를 덧붙일 때 이어 쓴다)
 function load(files) {
+  previousImport.cancel();
+  csvSelection.cancel(); // 폴더 반영 등 다른 경로에서 파일을 넣어도 이전 선택이 뒤늦게 덮어쓰지 않는다
   state.files = files;
   state.assignment = {};
   resetSlotState();
@@ -230,50 +274,25 @@ function load(files) {
 }
 
 // 「작년 Excel에서 불러오기」 (#24): 같은 기기의 작년 파일이면 비어 있는 칸만 채운다
-async function onPrevious(file) {
-  if (!file) return;
-  const status = $('prevStatus');
-  const show = (text, bad = false) => {
-    status.textContent = text;
-    status.classList.toggle('bad', bad);
-  };
-  let prev;
-  try {
-    prev = await readPreviousGeneral(new Uint8Array(await file.arrayBuffer()));
-  } catch (e) {
-    show(e.message, true); // readPreviousGeneral의 오류는 화면에 보여 줄 한국어 문구다
-    return;
-  }
-  const now = state.analysis?.result?.equipment.serial;
-  // 어느 기기 파일인지 모르면 채우지 않는다 (다른 기기 값이 성적서에 들어가지 않게)
-  if (!now) {
-    show('지금 결과의 기기 번호가 없어 작년 파일과 비교할 수 없습니다. CSV 6개로 결과를 낸 뒤 고르세요.', true);
-    return;
-  }
-  if (!prev.serial) {
-    show('작년 파일의 기기 번호(일반사항 D8)를 읽을 수 없어 채우지 않았습니다. 같은 기기의 파일인지 확인하세요.', true);
-    return;
-  }
-  if (prev.serial !== now) {
-    show(`작년 파일의 기기 번호(${prev.serial})가 지금 기기(${now})와 다릅니다. 같은 기기의 파일을 고르세요.`, true);
-    return;
-  }
-  const n = optionalForm.fill(prev.values);
-  formSerial = now;
-  $('optionalNotice').hidden = true;
-  show(n ? `작년 파일 ${file.name}에서 ${n}칸을 채웠습니다 (이미 넣은 칸은 그대로).` : `작년 파일 ${file.name}에서 채울 빈 칸이 없습니다.`); // #prevStatus(role=status)가 읽는다
-}
+const onPrevious = file => previousImport.select(file);
 
 async function onFiles(fileList) {
   const picked = [...fileList];
-  if (!picked.length) return;
-  const files = await Promise.all(picked.map(async (f) => ({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) })));
-  load(files);
+  if (!picked.length || excelSaving) return;
+  if (savedResult.needsConfirmation(state.files, state.analysis, inputSnapshot()) &&
+      !window.confirm('현재 결과를 아직 저장하지 않았습니다. 새 CSV로 바꾸면 현재 결과와 접수 확인 내용이 바뀝니다. 교체할까요?')) return;
+  previousImport.cancel();
+  await csvSelection.run(() => readCsvSelection(picked), files => {
+    load(files);
+    folderWatch.notifyManualLoad();
+  }, error => {
+    setMsg('failed', 'err', error instanceof DOMException ? 'CSV를 읽지 못했습니다. 접근 권한을 확인하고 다시 선택하세요.' : error.message);
+  });
 }
 
 // 결과 화면 → 저장 화면 (FR-M5-08). 패널·결과는 숨기기만 하고 상태는 그대로 둔다. 내려받기는 하지 않는다
 function goSave() {
-  if (!state.analysis?.result) return;
+  if (!state.analysis?.result || readingSelection() || excelSaving) return;
   state.screen = 'save';
   $('app').hidden = true;
   $('saveScreen').hidden = false;
@@ -303,7 +322,7 @@ function goBack() {
 
 // 저장 위치와 파일 이름을 고르게 한 뒤 Excel을 만들어 쓴다 (PR #22). 고르는 창이 없는 브라우저는 안내만 한다
 async function save() {
-  if (excelSaving || watchBlock || !state.analysis?.result || !inputsValid()) {
+  if (excelSaving || readingSelection() || watchBlock || !state.analysis?.result || !inputsValid()) {
     syncSaveBlock();
     return;
   }
@@ -330,9 +349,9 @@ async function save() {
   };
   const template = state.template.bytes;
   const values = optionalForm.values();
+  const savingInputs = inputSnapshot();
   excelSaving = true;
   syncSaveBtn();
-  let writer;
   try {
     const target = await window.showSaveFilePicker({
       suggestedName: safeDownloadName(outputFileName(result)), // 접수번호_유속계.xlsx. 길이 상한·방향 제어 문자 제거 (보안 L2)
@@ -344,18 +363,13 @@ async function save() {
     const t0 = performance.now();
     const { bytes } = await buildXlsx(template, result, summaries, values, undefined, source);
     document.body.dataset.excelMs = String(Math.round(performance.now() - t0)); // 성능 시험용 (화면에는 보이지 않음)
-    if (stale()) return staleStop();
-    writer = await target.createWritable(); // TODO(확인 필요): Edge · Chrome에서 저장 창만 닫고 쓰지 않았을 때 빈 파일이 남는지
-    await writer.write(bytes);
-    await writer.close();
-    writer = null;
-    // 쓰는 도중에 재측정 CSV가 확인됐으면(사용자가 이미 저장을 정한 뒤라 막지 않음) 그 사실을 덧붙인다
-    setMsg('saved', 'ok', `저장했습니다: ${target.name}${watchBlock ? ' · 그 사이 재측정 CSV가 들어왔습니다. 위 띠를 확인하세요.' : ''}`);
+    if (!(await writeSnapshot(target, bytes, () => !stale()))) return staleStop();
+    savedResult.markSaved(savingFiles, savingAnalysis, savingInputs);
+    setMsg('saved', 'ok', `저장했습니다: ${target.name}`);
     $('saveName').textContent = target.name;
     say('Excel을 저장했습니다.');
     folderWatch.notifySaved(savingFiles); // 다음 기기가 기다리고 있으면 넘어간다 (#23 B안)
   } catch (error) {
-    if (writer) await writer.abort().catch(() => {});
     if (error.name === 'AbortError') setMsg('cancelled', '', 'Excel 저장을 취소했습니다.');
     else {
       console.error(error); // 원문은 개발자 도구에만 남긴다 (라이브러리 오류는 영문일 수 있음)
@@ -378,6 +392,15 @@ $('fileInput').addEventListener('change', (e) => {
 $('templateInput').addEventListener('change', async (e) => {
   await onTemplate(e.target.files[0]);
   e.target.value = '';
+});
+$('forgetTemplate').addEventListener('click', () => {
+  if (excelSaving) return;
+  templateSelection.cancel(); // 진행 중인 읽기·기억한 양식 복원도 무효화한다
+  state.template = null;
+  try { localStorage.removeItem(TEMPLATE_KEY); } catch { /* 이번 실행의 선택도 함께 지운다. */ }
+  syncTemplate();
+  syncSaveBtn();
+  setMsg('', '', '기억한 양식을 지웠습니다. 저장 전에 양식을 다시 선택하세요.');
 });
 $('prevInput').addEventListener('change', async (e) => {
   await onPrevious(e.target.files[0]);

@@ -1,10 +1,10 @@
 // 작년 Excel(이 도구가 만든 파일 또는 같은 양식의 xlsx · xlsm)의 일반사항 시트에서 저장 화면 입력 값을 읽는다 (#24)
 // TODO(확인 필요): 연구원이 손으로 만든 실제 xlsm이 같은 셀 위치 · 날짜 표기인지 (Q13)
-import JSZip from 'jszip';
 import defaultConfig from '../config.js';
 import { OPTIONAL_FIELDS } from './cellValues.js';
 import { parseXml, readCell } from './sheetXml.js';
 import { sheetPaths } from './buildXlsx.js';
+import { loadWorkbook } from './workbookSafety.js';
 
 // 작년 값을 불러오는 입력 키 (PM 목록). 접수일자(G3) · 참조 성적서 번호(G13)는 올해 값이라 뺀다
 const CARRY_KEYS = ['representative', 'phone', 'maker', 'approvalNumber', 'approvalDate', 'firstInspectionDate', 'pitotType', 'pitotSerial'];
@@ -14,8 +14,8 @@ const DATE_KEYS = new Set(['approvalDate', 'firstInspectionDate', 'previousInspe
 // date1904: 통합 문서가 1904 날짜 체계(workbookPr date1904)면 0 = 1904-01-01 (PR #29 리뷰).
 // 1900 체계는 Excel이 1900-02-29(60)를 있는 날로 세므로 60 미만은 하루를 당기고, 60은 없는 날이라 빈칸
 export function excelDateText(serial, { date1904 = false } = {}) {
-  if (!Number.isFinite(serial) || serial < (date1904 ? 0 : 1) || serial > 2958465) return ''; // 빈 칸을 가리키는 수식의 0 · 음수 · 9999-12-31 넘는 값은 빈칸
   const day = Math.floor(serial);
+  if (!Number.isFinite(serial) || serial < (date1904 ? 0 : 1) || day > (date1904 ? 2957003 : 2958465)) return ''; // 날짜 체계별 9999-12-31 상한. 시각은 버린다
   let base;
   if (date1904) base = Date.UTC(1904, 0, 1);
   else if (day === 60) return '';
@@ -51,8 +51,9 @@ export async function readPreviousGeneral(bytes, config = defaultConfig) {
 async function readGeneral(bytes, config) {
   let zip;
   try {
-    zip = await JSZip.loadAsync(bytes);
-  } catch {
+    zip = await loadWorkbook(bytes, { output: false });
+  } catch (error) {
+    if (error.message.startsWith('Excel 양식을 사용할 수 없습니다.')) throw fail(error.message.replace(/^Excel 양식을/, '작년 파일을'));
     throw fail('Excel 파일(.xlsx · .xlsm)이 아닙니다.');
   }
   const read = (p) => zip.file(p)?.async('string');
